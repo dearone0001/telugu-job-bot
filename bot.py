@@ -30,12 +30,10 @@ def get_job_details(url):
             "job_description": "Detailed notification available on the official website."
         }
 
-        # Simple heuristic extraction
-        sections = content.find_all(['h2', 'h3', 'p', 'table', 'li', 'span'])
+        sections = content.find_all(['h2', 'h3', 'p', 'table', 'li', 'span', 'strong'])
 
-        # Try to extract a brief description from the first few paragraphs
-        p_tags = content.find_all('p')
-        for p in p_tags:
+        # Description extraction
+        for p in content.find_all('p'):
             text = p.text.strip()
             if len(text) > 100 and "recruitment" in text.lower():
                 details["job_description"] = text
@@ -58,19 +56,25 @@ def get_job_details(url):
                     rows_list.append("|".join(cells))
                 details["pattern_table"] = "\n".join(rows_list)
 
-        # Extract real PDF and Apply links
+        # Improved Link Extraction
         links_dict = {}
         for a in content.find_all('a'):
             link_text = a.text.strip().lower()
             href = a.get('href', '')
-            if not href: continue
+            if not href or href.startswith('#'): continue
 
-            if "notification" in link_text and href.endswith(".pdf"):
-                links_dict["Official Notification (PDF)"] = href
-            elif "apply online" in link_text or ("click here" in link_text and "apply" in a.find_parent('td').find_previous_sibling('td').text.lower() if a.find_parent('td') and a.find_parent('td').find_previous_sibling('td') else False):
+            # Absolute URL conversion if needed
+            if href.startswith('/'):
+                href = "https://www.freejobalert.com" + href
+
+            if "notification" in link_text:
+                links_dict["Official Notification"] = href
+            elif "apply online" in link_text:
                 links_dict["Apply Online"] = href
             elif "official website" in link_text:
                 links_dict["Official Website"] = href
+            elif "syllabus" in link_text:
+                links_dict["Exam Syllabus"] = href
 
         if links_dict:
             details["links"] = "|".join([f"{k}:{v}" for k, v in links_dict.items()])
@@ -82,7 +86,7 @@ def get_job_details(url):
         return {}
 
 def scrape_jobs():
-    print("Executing Deep All-India Central JSONL crawl with descriptions and real links...")
+    print("Executing Deep All-India Central JSONL crawl...")
     try:
         response = requests.get(URL, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -130,7 +134,7 @@ def scrape_jobs():
                     "job_description": details.get("job_description", "")
                 }
                 scraped_items.append(item_node)
-                time.sleep(1) # Be respectful
+                time.sleep(1)
 
     return scraped_items
 
@@ -140,4 +144,4 @@ if __name__ == "__main__":
         with open('jobs.jsonl', 'w', encoding='utf-8') as f:
             for item in job_list:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        print(f"jobs.jsonl refreshed with {len(job_list)} All-India positions including descriptions and links!")
+        print(f"jobs.jsonl refreshed with {len(job_list)} positions.")

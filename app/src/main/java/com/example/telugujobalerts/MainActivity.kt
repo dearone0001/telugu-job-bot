@@ -363,28 +363,42 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                 
                 Text(text = "Important Links", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007BF5))
                 Spacer(modifier = Modifier.height(12.dp))
-                activeJob.links.split("|").forEach { linkPart ->
-                    val parts = linkPart.split(":")
-                    val label = parts[0].trim()
-                    val url = if (parts.size > 1) linkPart.substring(linkPart.indexOf(":") + 1).trim() else ""
-                    if (label.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable {
-                                if (url.isNotEmpty()) {
-                                    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-                                    context.startActivity(intent)
+                
+                val linksList = activeJob.links.split("|").filter { it.contains(":") }
+                if (linksList.isEmpty()) {
+                    Text(text = "Please check the official website for full notification and application details.", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    linksList.forEach { linkPart ->
+                        val parts = linkPart.split(":")
+                        val label = parts[0].trim()
+                        val url = linkPart.substring(linkPart.indexOf(":") + 1).trim()
+                        
+                        if (label.isNotEmpty() && url.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Log.e("TeluguJobAlerts", "Error opening link: $url", e)
+                                    }
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.4f))
+                            ) {
+                                Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (label.contains("PDF", ignoreCase = true) || label.contains("Notification", ignoreCase = true)) 
+                                            Icons.Default.PictureAsPdf else Icons.Default.Link,
+                                        contentDescription = null,
+                                        tint = Color(0xFF007BF5)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(text = label, fontWeight = FontWeight.Bold, color = Color(0xFF1A1C1E))
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(text = "Open", color = Color(0xFF007BF5), fontWeight = FontWeight.Bold)
                                 }
-                            },
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
-                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.4f))
-                        ) {
-                            Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Link, contentDescription = null, tint = Color(0xFF007BF5))
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(text = label, fontWeight = FontWeight.Bold, color = Color(0xFF1A1C1E))
-                                Spacer(modifier = Modifier.weight(1f))
-                                Text(text = "Visit", color = Color(0xFF007BF5), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
