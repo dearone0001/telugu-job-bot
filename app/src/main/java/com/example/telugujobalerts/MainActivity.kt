@@ -42,6 +42,9 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import org.json.JSONObject
 
 data class StructuredJobModel(
@@ -74,8 +77,32 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     var selectedJob by remember { mutableStateOf<StructuredJobModel?>(null) }
     var searchText by remember { mutableStateOf("") }
     var selectedNavIndex by remember { mutableIntStateOf(0) }
+    var interstitialAd by remember { mutableStateOf<InterstitialAd?>(null) }
 
     val dataEndpoint = "https://raw.githubusercontent.com/dearone0001/telugu-job-bot/main/jobs.jsonl"
+
+    fun loadInterstitial() {
+        val adRequest = AdRequest.Builder().build()
+        InterstitialAd.load(context, AdConfig.INTERSTITIAL_AD_UNIT_ID, adRequest,
+            object : InterstitialAdLoadCallback() {
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    interstitialAd = null
+                }
+                override fun onAdLoaded(ad: InterstitialAd) {
+                    interstitialAd = ad
+                }
+            })
+    }
+
+    fun showInterstitial(onAdDismissed: () -> Unit) {
+        if (interstitialAd != null) {
+            interstitialAd?.show(activity)
+            loadInterstitial()
+            onAdDismissed()
+        } else {
+            onAdDismissed()
+        }
+    }
 
     fun loadData() {
         isFetchingData = true
@@ -128,7 +155,10 @@ fun JobDashboardScreen(activity: ComponentActivity) {
         queue.add(request)
     }
 
-    LaunchedEffect(Unit) { loadData() }
+    LaunchedEffect(Unit) { 
+        loadData()
+        loadInterstitial()
+    }
 
     if (selectedJob != null) {
         BackHandler { selectedJob = null }
@@ -147,7 +177,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
                     actions = {
-                        IconButton(onClick = { loadData() }) {
+                        IconButton(onClick = { showInterstitial { loadData() } }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
                     }
@@ -232,7 +262,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     )
                 }
 
-                // Section 2: Category Grid
+                // Section 2: Category Row
                 item {
                     Text("Categories", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Spacer(modifier = Modifier.height(12.dp))
@@ -256,20 +286,12 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                 }
                 
                 val filtered = listState.filter { it.title.contains(searchText, ignoreCase = true) }
-                items(filtered.take(5)) { job ->
-                    ModernJobCard(job = job, onClick = { selectedJob = job })
-                }
-
-                // Section 4: Trending Jobs
-                item {
-                    Text("Trending Jobs", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
-                items(filtered.reversed().take(5)) { job ->
+                items(filtered.take(10)) { job ->
                     ModernJobCard(job = job, onClick = { selectedJob = job })
                 }
             }
         } else {
-            // Detailed Job View (Keep current high-end details layout)
+            // High-end Details Layout
             Column(
                 modifier = Modifier
                     .padding(padding)
