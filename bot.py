@@ -9,19 +9,28 @@ from datetime import datetime
 URL = "https://www.freejobalert.com/latest-notifications/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
 
-def is_expired(date_str):
-    """Checks if a job's last date has passed."""
-    if not date_str or "TBA" in date_str or "Advt" in date_str:
-        return False
+def parse_date(date_str):
+    """Normalizes date strings to YYYY-MM-DD for reliable sorting."""
+    if not date_str or any(x in date_str.upper() for x in ["TBA", "ADVT", "NA"]):
+        return ""
     try:
-        # Try common date formats found on FreeJobAlert
         for fmt in ('%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y'):
             try:
-                expiry_date = datetime.strptime(date_str.strip(), fmt)
-                return expiry_date < datetime.now()
+                return datetime.strptime(date_str.strip(), fmt).strftime('%Y-%m-%d')
             except ValueError:
                 continue
+        return ""
+    except:
+        return ""
+
+def is_expired(date_str):
+    """Checks if a job's last date has passed."""
+    iso_date = parse_date(date_str)
+    if not iso_date:
         return False
+    try:
+        expiry_date = datetime.strptime(iso_date, '%Y-%m-%d')
+        return expiry_date.date() < datetime.now().date()
     except:
         return False
 
@@ -114,16 +123,20 @@ def scrape_jobs():
                 title_cell = cells[0]
                 raw_title = title_cell.text.strip()
                 apply_url = title_cell.find('a')['href'] if title_cell.find('a') else None
-                deadline = cells[2].text.strip()
-                post_date = cells[1].text.strip() if len(cells) > 1 else ""
+                raw_deadline = cells[2].text.strip()
+                raw_post_date = cells[1].text.strip() if len(cells) > 1 else ""
 
                 # Skip expired jobs
-                if is_expired(deadline):
+                if is_expired(raw_deadline):
                     continue
 
                 if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
-                    print(f"Checking: {raw_title[:30]}...")
+                    print(f"Deep scraping: {raw_title[:30]}...")
                     details = get_job_details(apply_url)
+
+                    # Standardize dates for app-side sorting/filtering
+                    iso_deadline = parse_date(raw_deadline) or raw_deadline
+                    iso_post_date = parse_date(raw_post_date) or datetime.now().strftime('%Y-%m-%d')
 
                     cat = "Job Alert"
                     if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
@@ -135,7 +148,7 @@ def scrape_jobs():
                         "title": raw_title,
                         "category": cat,
                         "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
-                        "last_date": deadline,
+                        "last_date": iso_deadline,
                         "district": "All India",
                         "age_limit": details.get("age_limit", ""),
                         "qualification": details.get("qualification", ""),
@@ -144,20 +157,22 @@ def scrape_jobs():
                         "links": details.get("links", ""),
                         "application_fee": details.get("application_fee", ""),
                         "selection_process": details.get("selection_process", ""),
-                        "post_date": post_date,
+                        "post_date": iso_post_date,
                         "job_description": details.get("job_description", "")
                     }
                     scraped_items.append(item_node)
                     time.sleep(1)
 
-                    if len(scraped_items) >= 40: break
-        if len(scraped_items) >= 40: break
+                    if len(scraped_items) >= 50: break
+        if len(scraped_items) >= 50: break
 
     return scraped_items
 
 if __name__ == "__main__":
     job_list = scrape_jobs()
     if job_list:
+        # Sort by post_date descending before saving
+        job_list.sort(key=lambda x: x['post_date'], reverse=True)
         with open('jobs.jsonl', 'w', encoding='utf-8') as f:
             for item in job_list:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")

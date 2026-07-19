@@ -194,8 +194,21 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                           job.category.contains(searchText, ignoreCase = true)
         val matchesCategory = if (selectedCategory == "All") true 
                             else job.category.contains(selectedCategory, ignoreCase = true)
-        matchesSearch && matchesCategory
-    }.sortedByDescending { it.postDate } // Ensure latest jobs are at the top
+        
+        // Client-side expiry check for safety
+        val isNotExpired = try {
+            val dateParts = job.lastDate.split("-")
+            if (dateParts.size == 3) {
+                val year = dateParts[0].toInt()
+                val month = dateParts[1].toInt()
+                val day = dateParts[2].toInt()
+                val expiry = java.util.Calendar.getInstance().apply { set(year, month - 1, day) }
+                expiry.timeInMillis >= System.currentTimeMillis()
+            } else true
+        } catch (e: Exception) { true }
+
+        matchesSearch && matchesCategory && isNotExpired
+    }.sortedByDescending { it.postDate }
 
     Scaffold(
         containerColor = Color.Transparent,
