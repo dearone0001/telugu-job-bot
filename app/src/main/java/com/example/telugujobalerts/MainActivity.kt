@@ -57,7 +57,8 @@ data class StructuredJobModel(
     val lastDate: String, val district: String,
     val ageLimit: String, val qualification: String,
     val patternTable: String, val instructions: String, val links: String,
-    val applicationFee: String = "", val selectionProcess: String = "", val postDate: String = ""
+    val applicationFee: String = "", val selectionProcess: String = "", val postDate: String = "",
+    val jobDescription: String = ""
 )
 
 class MainActivity : ComponentActivity() {
@@ -148,7 +149,8 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                             links = json.optString("links"),
                             applicationFee = json.optString("application_fee"),
                             selectionProcess = json.optString("selection_process"),
-                            postDate = json.optString("post_date")
+                            postDate = json.optString("post_date"),
+                            jobDescription = json.optString("job_description")
                         )
                     )
                 } catch (e: Exception) {}
@@ -344,6 +346,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 
+                GlassySection(title = "Job Description", content = activeJob.jobDescription)
                 GlassySection(title = "Application Fee", content = activeJob.applicationFee)
                 GlassySection(title = "Age Limit", content = activeJob.ageLimit)
                 GlassySection(title = "Educational Qualification", content = activeJob.qualification)
