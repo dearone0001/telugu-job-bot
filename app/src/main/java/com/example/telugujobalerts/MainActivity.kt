@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Futuristic Mesh Gradient Background
+                    // Mesh Gradient Background
                     Box(modifier = Modifier
                         .fillMaxSize()
                         .background(
@@ -279,7 +279,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Section 1: Glassy Search Bar
+                // Search Bar
                 item {
                     OutlinedTextField(
                         value = searchText,
@@ -298,7 +298,18 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     )
                 }
 
-                // Section 2: Glassy Category Row
+                // Top Matches for You Section
+                item {
+                    Text("Top matches for you", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = Color(0xFF1A1C1E))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        items(filtered.reversed().take(5)) { job ->
+                            FeaturedJobCard(job = job, onClick = { selectedJob = job })
+                        }
+                    }
+                }
+
+                // Category Row
                 item {
                     Text("Categories", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = Color(0xFF1A1C1E))
                     Spacer(modifier = Modifier.height(12.dp))
@@ -322,7 +333,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     }
                 }
 
-                // Section 3: Latest Jobs
+                // Latest Jobs
                 item {
                     Text(
                         if (selectedCategory == "All") "Latest Opportunities" else "$selectedCategory Jobs", 
@@ -414,6 +425,49 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     Text("Share Job with Friends", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(40.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun FeaturedJobCard(job: StructuredJobModel, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .width(280.dp)
+            .height(160.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f))
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFE0F2FE)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Work, contentDescription = null, tint = Color(0xFF007BF5), modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(text = job.category, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF007BF5))
+                        Text(text = job.district, fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = job.title,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp,
+                    color = Color(0xFF1A1C1E),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
