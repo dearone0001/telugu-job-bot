@@ -11,23 +11,27 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -68,8 +72,9 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     val listState = remember { mutableStateListOf<StructuredJobModel>() }
     var isFetchingData by remember { mutableStateOf(false) }
     var selectedJob by remember { mutableStateOf<StructuredJobModel?>(null) }
+    var searchText by remember { mutableStateOf("") }
+    var selectedNavIndex by remember { mutableIntStateOf(0) }
 
-    // Updated data endpoint to use the new JSONL source
     val dataEndpoint = "https://raw.githubusercontent.com/dearone0001/telugu-job-bot/main/jobs.jsonl"
 
     fun loadData() {
@@ -98,16 +103,13 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                             links = json.optString("links")
                         )
                     )
-                } catch (e: Exception) {
-                    // Skip malformed lines
-                }
+                } catch (e: Exception) {}
             }
             isFetchingData = false
         }
 
         fun loadLocalData() {
             try {
-                // Fallback to local JSONL if remote fails
                 val inputStream = activity.assets.open("jobs.jsonl")
                 val size = inputStream.available()
                 val buffer = ByteArray(size)
@@ -126,9 +128,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
         queue.add(request)
     }
 
-    LaunchedEffect(Unit) {
-        loadData()
-    }
+    LaunchedEffect(Unit) { loadData() }
 
     if (selectedJob != null) {
         BackHandler { selectedJob = null }
@@ -136,77 +136,140 @@ fun JobDashboardScreen(activity: ComponentActivity) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(text = if (selectedJob == null) "Telugu Job Alerts" else "Job Details", fontWeight = FontWeight.SemiBold, fontSize = 20.sp) },
-                navigationIcon = {
-                    if (selectedJob != null) {
+            if (selectedJob == null) {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Text(
+                            text = "Telugu Job Alerts",
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
+                    actions = {
+                        IconButton(onClick = { loadData() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
+                    }
+                )
+            } else {
+                TopAppBar(
+                    title = { Text("Job Details", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
                         IconButton(onClick = { selectedJob = null }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { loadData() }) { Icon(Icons.Default.Refresh, contentDescription = "Refresh") }
-                    IconButton(onClick = { }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = "Save") }
-                    IconButton(onClick = {
-                        val shareText = if (selectedJob != null) "Check out this job: ${selectedJob!!.title}\nLast Date: ${selectedJob!!.lastDate}" else "Check out latest Telugu Job Alerts!"
-                        val sendIntent: Intent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, shareText)
-                            type = "text/plain"
-                        }
-                        context.startActivity(Intent.createChooser(sendIntent, null))
-                    }) { Icon(Icons.Default.Share, contentDescription = "Share") }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                )
+            }
         },
         bottomBar = {
-            Box(modifier = Modifier.fillMaxWidth().wrapContentHeight().background(Color.White), contentAlignment = Alignment.Center) {
-                AndroidView(modifier = Modifier.fillMaxWidth(), factory = { ctx ->
-                    AdView(ctx).apply {
-                        setAdSize(AdSize.BANNER)
-                        setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
-                        loadAd(AdRequest.Builder().build())
-                    }
-                })
+            Column {
+                Box(modifier = Modifier.fillMaxWidth().wrapContentHeight().background(Color.White).padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                    AndroidView(modifier = Modifier.fillMaxWidth(), factory = { ctx ->
+                        AdView(ctx).apply {
+                            setAdSize(AdSize.BANNER)
+                            setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
+                            loadAd(AdRequest.Builder().build())
+                        }
+                    })
+                }
+                NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
+                    NavigationBarItem(
+                        selected = selectedNavIndex == 0,
+                        onClick = { selectedNavIndex = 0 },
+                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                        label = { Text("Home") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedNavIndex == 1,
+                        onClick = { selectedNavIndex = 1 },
+                        icon = { Icon(Icons.Default.Work, contentDescription = "Jobs") },
+                        label = { Text("Jobs") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedNavIndex == 2,
+                        onClick = { selectedNavIndex = 2 },
+                        icon = { Icon(Icons.Default.Notifications, contentDescription = "Alerts") },
+                        label = { Text("Alerts") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedNavIndex == 3,
+                        onClick = { selectedNavIndex = 3 },
+                        icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
+                        label = { Text("Profile") }
+                    )
+                }
             }
         }
     ) { padding ->
         val activeJob = selectedJob
         if (activeJob == null) {
-            Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-                    items(listState) { job ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                                .clickable { selectedJob = job },
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            elevation = CardDefaults.cardElevation(2.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = job.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1E88E5))
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Category: ${job.category}", color = Color.Gray)
-                                    Text(text = "Last Date: ${job.lastDate}", color = Color.Red, fontWeight = FontWeight.Bold)
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Button(
-                                    onClick = { selectedJob = job },
-                                    modifier = Modifier.align(Alignment.End),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
-                                ) {
-                                    Text("Open Details")
-                                }
-                            }
+            LazyColumn(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .background(Color(0xFFF7F9FC)),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                // Section 1: Search Bar
+                item {
+                    OutlinedTextField(
+                        value = searchText,
+                        onValueChange = { searchText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search jobs, companies...") },
+                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            focusedIndicatorColor = Color(0xFF007BF5),
+                            unfocusedIndicatorColor = Color.LightGray
+                        )
+                    )
+                }
+
+                // Section 2: Category Grid
+                item {
+                    Text("Categories", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val categories = listOf(
+                            "Banking" to Icons.Default.AccountBalance,
+                            "Central" to Icons.Default.Public,
+                            "State" to Icons.Default.LocationCity,
+                            "Railways" to Icons.Default.Train,
+                            "IT" to Icons.Default.LaptopMac
+                        )
+                        items(categories) { (name, icon) ->
+                            CategoryItem(name, icon)
                         }
                     }
                 }
+
+                // Section 3: Latest Jobs
+                item {
+                    Text("Latest Jobs", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+                
+                val filtered = listState.filter { it.title.contains(searchText, ignoreCase = true) }
+                items(filtered.take(5)) { job ->
+                    ModernJobCard(job = job, onClick = { selectedJob = job })
+                }
+
+                // Section 4: Trending Jobs
+                item {
+                    Text("Trending Jobs", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+                items(filtered.reversed().take(5)) { job ->
+                    ModernJobCard(job = job, onClick = { selectedJob = job })
+                }
             }
         } else {
+            // Detailed Job View (Keep current high-end details layout)
             Column(
                 modifier = Modifier
                     .padding(padding)
@@ -215,63 +278,67 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Text(text = activeJob.title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
-                Spacer(modifier = Modifier.height(16.dp))
-
+                Text(text = activeJob.title, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF1A1C1E))
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CategoryBadge(category = activeJob.category)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "• ${activeJob.district}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(modifier = Modifier.height(24.dp))
                 RenderTextSection(title = "Age Limit", content = activeJob.ageLimit)
                 RenderTextSection(title = "Educational Qualification", content = activeJob.qualification)
-
                 if (activeJob.patternTable.isNotEmpty()) {
-                    Text(text = "Written Examination Pattern", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = "Written Examination Pattern", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007BF5))
+                    Spacer(modifier = Modifier.height(12.dp))
                     RenderDataGridTable(tableData = activeJob.patternTable)
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
-
                 RenderTextSection(title = "Important Instructions", content = activeJob.instructions)
-
-                Text(text = "Important Links", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
-                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = "Important Links", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007BF5))
+                Spacer(modifier = Modifier.height(12.dp))
                 activeJob.links.split("|").forEach { linkPart ->
                     val parts = linkPart.split(":")
                     val label = parts[0].trim()
                     val url = if (parts.size > 1) linkPart.substring(linkPart.indexOf(":") + 1).trim() else ""
-                    
                     if (label.isNotEmpty()) {
-                        Text(text = "• $label: ", fontSize = 15.sp, modifier = Modifier.padding(vertical = 4.dp))
-                        Text(
-                            text = "Click here",
-                            fontSize = 15.sp,
-                            color = Color(0xFF1976D2),
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .padding(start = 16.dp, bottom = 8.dp)
-                                .clickable {
-                                    if (url.isNotEmpty()) {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                        context.startActivity(intent)
-                                    }
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                                if (url.isNotEmpty()) {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    context.startActivity(intent)
                                 }
-                        )
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9))
+                        ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Link, contentDescription = null, tint = Color(0xFF007BF5))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(text = label, fontWeight = FontWeight.Bold, color = Color(0xFF1A1C1E))
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(text = "Visit", color = Color(0xFF007BF5), fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(32.dp))
                 Button(
                     onClick = {
-                        val sendIntent: Intent = Intent().apply {
+                        val sendIntent = Intent().apply {
                             action = Intent.ACTION_SEND
                             putExtra(Intent.EXTRA_TEXT, "Check out this job: ${activeJob.title}\nDetails: ${activeJob.qualification}")
                             type = "text/plain"
                         }
                         context.startActivity(Intent.createChooser(sendIntent, null))
                     },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007BF5))
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Share This Job", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Share Job with Friends", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(40.dp))
             }
@@ -280,9 +347,99 @@ fun JobDashboardScreen(activity: ComponentActivity) {
 }
 
 @Composable
+fun CategoryItem(name: String, icon: ImageVector) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(Color.White)
+                .border(1.dp, Color(0xFFE0E0E0), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Color(0xFF007BF5))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(name, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun ModernJobCard(job: StructuredJobModel, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(Color(0xFFE0F2FE), Color(0xFFF1F5F9)))),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = when {
+                        job.category.contains("Bank", true) -> Icons.Default.AccountBalance
+                        job.category.contains("SSC", true) -> Icons.Default.Work
+                        else -> Icons.Default.Business
+                    },
+                    contentDescription = null,
+                    tint = Color(0xFF007BF5)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = job.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1A1C1E),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = job.category, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "• ${job.district}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "Last Date: ${job.lastDate}", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF007BF5))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryBadge(category: String) {
+    Surface(
+        color = Color(0xFFE0F2FE),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Text(
+            text = category,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFF007BF5),
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
 fun RenderTextSection(title: String, content: String) {
     if (content.isEmpty()) return
-    Text(text = title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1976D2))
+    Text(text = title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007BF5))
     Spacer(modifier = Modifier.height(8.dp))
     content.split("\n").forEach { line ->
         if (line.trim().isNotEmpty()) {
