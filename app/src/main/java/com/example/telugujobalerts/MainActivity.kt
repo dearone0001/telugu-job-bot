@@ -69,6 +69,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     var interstitialAd by remember { mutableStateOf<InterstitialAd?>(null) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var selectedJob by remember { mutableStateOf<JobModel?>(null) }
+    var webViewUrl by remember { mutableStateOf<String?>(null) }
     val tabs = listOf("All India", "AP/TS", "Banking", "SSC/RRB")
 
     fun loadInterstitial() {
@@ -146,8 +147,10 @@ fun JobDashboardScreen(activity: ComponentActivity) {
         else -> listState
     }
 
-    if (selectedJob != null) {
-        JobDetailsScreen(job = selectedJob!!, onBack = { selectedJob = null })
+    if (webViewUrl != null) {
+        InAppBrowserScreen(url = webViewUrl!!, onBack = { webViewUrl = null })
+    } else if (selectedJob != null) {
+        JobDetailsScreen(job = selectedJob!!, onBack = { selectedJob = null }, onApply = { webViewUrl = it })
     } else {
         Scaffold(
             topBar = {
@@ -266,7 +269,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun JobDetailsScreen(job: JobModel, onBack: () -> Unit) {
+fun JobDetailsScreen(job: JobModel, onBack: () -> Unit, onApply: (String) -> Unit) {
     val context = LocalContext.current
     Scaffold(
         topBar = {
@@ -357,17 +360,14 @@ fun JobDetailsScreen(job: JobModel, onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(32.dp))
             
             Button(
-                onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(job.applyLink))
-                    context.startActivity(intent)
-                },
+                onClick = { onApply(job.applyLink) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007BF5))
             ) {
                 Icon(Icons.Default.OpenInNew, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Apply Online (Official Website)", fontWeight = FontWeight.Bold)
+                Text("Apply Online (In-App)", fontWeight = FontWeight.Bold)
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -391,6 +391,36 @@ fun JobDetailsScreen(job: JobModel, onBack: () -> Unit) {
             
             Spacer(modifier = Modifier.height(50.dp))
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InAppBrowserScreen(url: String, onBack: () -> Unit) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Official Website", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        AndroidView(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    webViewClient = android.webkit.WebViewClient()
+                    loadUrl(url)
+                }
+            }
+        )
     }
 }
 
