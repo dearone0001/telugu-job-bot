@@ -4,7 +4,8 @@ import requests
 from bs4 import BeautifulSoup
 import time
 
-URL = "https://www.freejobalert.com/central-government-jobs/"
+# Targeting the absolute latest notifications for 2025/2026 data
+URL = "https://www.freejobalert.com/latest-notifications/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
 
 def get_job_details(url):
@@ -56,14 +57,13 @@ def get_job_details(url):
                     rows_list.append("|".join(cells))
                 details["pattern_table"] = "\n".join(rows_list)
 
-        # Improved Link Extraction
+        # Improved Link Extraction - finding official sources
         links_dict = {}
         for a in content.find_all('a'):
             link_text = a.text.strip().lower()
             href = a.get('href', '')
             if not href or href.startswith('#'): continue
 
-            # Absolute URL conversion if needed
             if href.startswith('/'):
                 href = "https://www.freejobalert.com" + href
 
@@ -73,8 +73,6 @@ def get_job_details(url):
                 links_dict["Apply Online"] = href
             elif "official website" in link_text:
                 links_dict["Official Website"] = href
-            elif "syllabus" in link_text:
-                links_dict["Exam Syllabus"] = href
 
         if links_dict:
             details["links"] = "|".join([f"{k}:{v}" for k, v in links_dict.items()])
@@ -86,7 +84,7 @@ def get_job_details(url):
         return {}
 
 def scrape_jobs():
-    print("Executing Deep All-India Central JSONL crawl...")
+    print("Executing Latest Jobs JSONL crawl (2025/2026)...")
     try:
         response = requests.get(URL, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -94,47 +92,55 @@ def scrape_jobs():
         return []
 
     scraped_items = []
-    table = soup.find('table', {'class': 'vtable'})
-    if not table:
+    # Latest notification tables on this page
+    tables = soup.find_all('table', {'class': 'vtable'})
+    if not tables:
         return []
 
-    table_rows = table.find_all('tr')
-    for row in table_rows[:15]:
-        cells = row.find_all('td')
-        if len(cells) >= 3:
-            title_cell = cells[0]
-            raw_title = title_cell.text.strip()
-            apply_url = title_cell.find('a')['href'] if title_cell.find('a') else None
-            deadline = cells[2].text.strip()
-            post_date = cells[1].text.strip() if len(cells) > 1 else ""
+    # Process all major tables (Central, State, etc.)
+    for table in tables[:3]:
+        table_rows = table.find_all('tr')
+        for row in table_rows:
+            cells = row.find_all('td')
+            if len(cells) >= 3:
+                title_cell = cells[0]
+                raw_title = title_cell.text.strip()
+                apply_url = title_cell.find('a')['href'] if title_cell.find('a') else None
+                deadline = cells[2].text.strip()
+                post_date = cells[1].text.strip() if len(cells) > 1 else ""
 
-            if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
-                print(f"Deep scraping: {raw_title[:30]}...")
-                details = get_job_details(apply_url)
+                if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
+                    print(f"Deep scraping: {raw_title[:30]}...")
+                    details = get_job_details(apply_url)
 
-                cat = "Central Govt"
-                if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
-                elif "SSC" in raw_title: cat = "SSC"
-                elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
+                    # Dynamic categorization
+                    cat = "Job Alert"
+                    if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
+                    elif "SSC" in raw_title: cat = "SSC"
+                    elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
+                    elif "PSC" in raw_title: cat = "State Govt"
 
-                item_node = {
-                    "title": raw_title,
-                    "category": cat,
-                    "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
-                    "last_date": deadline if len(deadline) > 2 else "TBA",
-                    "district": "All India",
-                    "age_limit": details.get("age_limit", ""),
-                    "qualification": details.get("qualification", ""),
-                    "pattern_table": details.get("pattern_table", ""),
-                    "instructions": details.get("instructions", ""),
-                    "links": details.get("links", ""),
-                    "application_fee": details.get("application_fee", ""),
-                    "selection_process": details.get("selection_process", ""),
-                    "post_date": post_date,
-                    "job_description": details.get("job_description", "")
-                }
-                scraped_items.append(item_node)
-                time.sleep(1)
+                    item_node = {
+                        "title": raw_title,
+                        "category": cat,
+                        "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
+                        "last_date": deadline if len(deadline) > 2 else "TBA",
+                        "district": "All India",
+                        "age_limit": details.get("age_limit", ""),
+                        "qualification": details.get("qualification", ""),
+                        "pattern_table": details.get("pattern_table", ""),
+                        "instructions": details.get("instructions", ""),
+                        "links": details.get("links", ""),
+                        "application_fee": details.get("application_fee", ""),
+                        "selection_process": details.get("selection_process", ""),
+                        "post_date": post_date,
+                        "job_description": details.get("job_description", "")
+                    }
+                    scraped_items.append(item_node)
+                    time.sleep(1) # Be respectful
+
+                    if len(scraped_items) >= 25: break # Cap at 25 latest jobs
+        if len(scraped_items) >= 25: break
 
     return scraped_items
 
@@ -144,4 +150,4 @@ if __name__ == "__main__":
         with open('jobs.jsonl', 'w', encoding='utf-8') as f:
             for item in job_list:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        print(f"jobs.jsonl refreshed with {len(job_list)} positions.")
+        print(f"jobs.jsonl refreshed with {len(job_list)} latest positions.")
