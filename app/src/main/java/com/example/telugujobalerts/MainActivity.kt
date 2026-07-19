@@ -69,39 +69,37 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     var isFetchingData by remember { mutableStateOf(false) }
     var selectedJob by remember { mutableStateOf<StructuredJobModel?>(null) }
 
-    // 🔗 Data endpoint for job listings
-    val dataEndpoint = "https://raw.githubusercontent.com/dearone0001/telugu-job-bot/main/jobs.csv"
+    // Updated data endpoint to use the new JSONL source
+    val dataEndpoint = "https://raw.githubusercontent.com/dearone0001/telugu-job-bot/main/jobs.jsonl"
 
     fun loadData() {
         isFetchingData = true
         val queue = Volley.newRequestQueue(activity)
         
-        fun parseCsv(csvData: String) {
+        fun parseJsonl(jsonlData: String) {
             listState.clear()
-            val entries = csvData.split("\n")
-            for (i in 1 until entries.size) {
-                val line = entries[i].trim()
-                if (line.isEmpty()) continue
-                val cells = line.split(",")
-                if (cells.size >= 6) {
-                    try {
-                        val rawJson = cells[5].replace("~~", ",").trim()
-                        val json = JSONObject(rawJson)
-                        listState.add(
-                            StructuredJobModel(
-                                title = cells[0], category = cells[1], vacancies = cells[2],
-                                lastDate = cells[3], district = cells[4],
-                                ageLimit = json.optString("age_limit"),
-                                qualification = json.optString("qualification"),
-                                patternTable = json.optString("pattern_table"),
-                                instructions = json.optString("instructions"),
-                                links = json.optString("links")
-                            )
+            val lines = jsonlData.split("\n")
+            for (line in lines) {
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) continue
+                try {
+                    val json = JSONObject(trimmed)
+                    listState.add(
+                        StructuredJobModel(
+                            title = json.optString("title"),
+                            category = json.optString("category"),
+                            vacancies = json.optString("vacancies"),
+                            lastDate = json.optString("last_date"),
+                            district = json.optString("district"),
+                            ageLimit = json.optString("age_limit"),
+                            qualification = json.optString("qualification"),
+                            patternTable = json.optString("pattern_table"),
+                            instructions = json.optString("instructions"),
+                            links = json.optString("links")
                         )
-                    } catch (e: Exception) {
-                        // Fallback parsing if JSON is not present or malformed
-                        listState.add(StructuredJobModel(cells[0], cells[1], cells[2], cells[3], cells[4], "Age Info", "Qual Info", "", "Instructions Here", "Link 1"))
-                    }
+                    )
+                } catch (e: Exception) {
+                    // Skip malformed lines
                 }
             }
             isFetchingData = false
@@ -109,19 +107,20 @@ fun JobDashboardScreen(activity: ComponentActivity) {
 
         fun loadLocalData() {
             try {
-                val inputStream = activity.assets.open("jobs.csv")
+                // Fallback to local JSONL if remote fails
+                val inputStream = activity.assets.open("jobs.jsonl")
                 val size = inputStream.available()
                 val buffer = ByteArray(size)
                 inputStream.read(buffer)
                 inputStream.close()
-                parseCsv(String(buffer))
+                parseJsonl(String(buffer))
             } catch (e: Exception) {
                 isFetchingData = false
             }
         }
 
         val request = StringRequest(Request.Method.GET, dataEndpoint,
-            { response -> parseCsv(response) },
+            { response -> parseJsonl(response) },
             { loadLocalData() }
         )
         queue.add(request)
@@ -191,7 +190,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                                 Text(text = job.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1E88E5))
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "జిల్లా: ${job.district}", color = Color.Gray)
+                                    Text(text = "Category: ${job.category}", color = Color.Gray)
                                     Text(text = "Last Date: ${job.lastDate}", color = Color.Red, fontWeight = FontWeight.Bold)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
