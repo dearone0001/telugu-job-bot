@@ -10,7 +10,7 @@ object AdConfig {
     private const val TEST_INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712"
 
     // Set this to 'false' when you want to show REAL ads
-    const val USE_TEST_ADS = true
+    const val USE_TEST_ADS = false
 
     val BANNER_AD_UNIT_ID = if (USE_TEST_ADS) TEST_BANNER_ID else REAL_BANNER_ID
     val INTERSTITIAL_AD_UNIT_ID = if (USE_TEST_ADS) TEST_INTERSTITIAL_ID else REAL_INTERSTITIAL_ID

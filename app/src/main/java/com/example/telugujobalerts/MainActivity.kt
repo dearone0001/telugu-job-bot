@@ -153,7 +153,9 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                             jobDescription = json.optString("job_description")
                         )
                     )
-                } catch (e: Exception) {}
+                } catch (e: Exception) {
+                    Log.e("TeluguJobAlerts", "Error parsing job line", e)
+                }
             }
             isFetchingData = false
         }
@@ -193,7 +195,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
         val matchesCategory = if (selectedCategory == "All") true 
                             else job.category.contains(selectedCategory, ignoreCase = true)
         matchesSearch && matchesCategory
-    }
+    }.sortedByDescending { it.postDate } // Ensure latest jobs are at the top
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -232,7 +234,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                 AndroidView(modifier = Modifier.fillMaxWidth(), factory = { ctx ->
                     AdView(ctx).apply {
                         setAdSize(AdSize.BANNER)
-                        setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
+                        adUnitId = AdConfig.BANNER_AD_UNIT_ID
                         adListener = object : AdListener() {
                             override fun onAdFailedToLoad(error: LoadAdError) {
                                 Log.e("AdMob", "Banner failed: ${error.message} (Code: ${error.code})")
@@ -258,8 +260,15 @@ fun JobDashboardScreen(activity: ComponentActivity) {
             ) {
                 // Search Bar
                 item {
-                    OutlinedTextField(
-                        value = searchText,
+                    Column {
+                        Text(
+                            text = "Last updated: Just now",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+                        OutlinedTextField(
+                            value = searchText,
                         onValueChange = { searchText = it },
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("Search jobs, companies...", color = Color.Gray) },
@@ -274,6 +283,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                         )
                     )
                 }
+            }
 
                 // Top Matches for You Section
                 item {
