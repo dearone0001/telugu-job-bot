@@ -276,6 +276,19 @@ fun JobDetailsScreen(job: JobModel, onBack: () -> Unit) {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        val sendIntent: Intent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, "Check out this job: ${job.title}\n${job.applyLink}")
+                            type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, null)
+                        context.startActivity(shareIntent)
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Share")
+                    }
                 }
             )
         }
@@ -285,32 +298,98 @@ fun JobDetailsScreen(job: JobModel, onBack: () -> Unit) {
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .background(Color.White)
                 .padding(16.dp)
         ) {
-            Text(text = job.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                text = job.title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            
             Spacer(modifier = Modifier.height(16.dp))
             
-            DetailRow("Category", job.category)
-            DetailRow("District", job.district)
-            DetailRow("Vacancies", job.vacancies)
-            DetailRow("Last Date", job.lastDate)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    DetailRow("Category", job.category)
+                    DetailRow("District", job.district)
+                    DetailRow("Vacancies", job.vacancies)
+                    DetailRow("Last Date", job.lastDate)
+                }
+            }
             
             Spacer(modifier = Modifier.height(24.dp))
-            Text(text = "Notification Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = job.details, style = MaterialTheme.typography.bodyLarge)
+            
+            // Render structured details from scraper
+            val detailSections = job.details.split("---")
+            detailSections.forEach { section ->
+                val lines = section.trim().split("\n")
+                if (lines.isNotEmpty()) {
+                    val header = lines[0].trim()
+                    if (header.isNotEmpty()) {
+                        Text(
+                            text = header.replace("-", "").trim(),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF007BF5),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        
+                        lines.drop(1).forEach { line ->
+                            if (line.trim().isNotEmpty()) {
+                                Text(
+                                    text = line.trim(),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                    lineHeight = 24.sp
+                                )
+                            }
+                        }
+                        Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0xFFEEEEEE))
+                    }
+                }
+            }
             
             Spacer(modifier = Modifier.height(32.dp))
+            
             Button(
                 onClick = {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(job.applyLink))
                     context.startActivity(intent)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007BF5))
             ) {
+                Icon(Icons.Default.OpenInNew, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("Apply Online (Official Website)", fontWeight = FontWeight.Bold)
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            OutlinedButton(
+                onClick = {
+                    val sendIntent: Intent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, "Check out this job: ${job.title}\nDetails: ${job.details}\nApply here: ${job.applyLink}")
+                        type = "text/plain"
+                    }
+                    context.startActivity(Intent.createChooser(sendIntent, null))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Share This Job", fontWeight = FontWeight.Bold)
+            }
+            
+            Spacer(modifier = Modifier.height(50.dp))
         }
     }
 }
