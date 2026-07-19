@@ -77,6 +77,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     var selectedJob by remember { mutableStateOf<StructuredJobModel?>(null) }
     var searchText by remember { mutableStateOf("") }
     var selectedNavIndex by remember { mutableIntStateOf(0) }
+    var selectedCategory by remember { mutableStateOf("All") }
     var interstitialAd by remember { mutableStateOf<InterstitialAd?>(null) }
 
     val dataEndpoint = "https://raw.githubusercontent.com/dearone0001/telugu-job-bot/main/jobs.jsonl"
@@ -162,6 +163,14 @@ fun JobDashboardScreen(activity: ComponentActivity) {
 
     if (selectedJob != null) {
         BackHandler { selectedJob = null }
+    }
+
+    val filtered = listState.filter { job ->
+        val matchesSearch = job.title.contains(searchText, ignoreCase = true) || 
+                          job.category.contains(searchText, ignoreCase = true)
+        val matchesCategory = if (selectedCategory == "All") true 
+                            else job.category.contains(selectedCategory, ignoreCase = true)
+        matchesSearch && matchesCategory
     }
 
     Scaffold(
@@ -268,25 +277,34 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     Spacer(modifier = Modifier.height(12.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         val categories = listOf(
-                            "Banking" to Icons.Default.AccountBalance,
+                            "All" to Icons.Default.AllInclusive,
                             "Central" to Icons.Default.Public,
-                            "State" to Icons.Default.LocationCity,
+                            "Banking" to Icons.Default.AccountBalance,
                             "Railways" to Icons.Default.Train,
-                            "IT" to Icons.Default.LaptopMac
+                            "SSC" to Icons.Default.Assignment,
+                            "State" to Icons.Default.LocationCity
                         )
                         items(categories) { (name, icon) ->
-                            CategoryItem(name, icon)
+                            CategoryItem(
+                                name = name, 
+                                icon = icon, 
+                                isSelected = selectedCategory == name,
+                                onClick = { selectedCategory = name }
+                            )
                         }
                     }
                 }
 
                 // Section 3: Latest Jobs
                 item {
-                    Text("Latest Jobs", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(
+                        if (selectedCategory == "All") "Latest Jobs" else "$selectedCategory Jobs", 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 18.sp
+                    )
                 }
                 
-                val filtered = listState.filter { it.title.contains(searchText, ignoreCase = true) }
-                items(filtered.take(10)) { job ->
+                items(filtered.take(15)) { job ->
                     ModernJobCard(job = job, onClick = { selectedJob = job })
                 }
             }
@@ -369,20 +387,32 @@ fun JobDashboardScreen(activity: ComponentActivity) {
 }
 
 @Composable
-fun CategoryItem(name: String, icon: ImageVector) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+fun CategoryItem(name: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
         Box(
             modifier = Modifier
                 .size(64.dp)
                 .clip(CircleShape)
-                .background(Color.White)
-                .border(1.dp, Color(0xFFE0E0E0), CircleShape),
+                .background(if (isSelected) Color(0xFF007BF5) else Color.White)
+                .border(1.dp, if (isSelected) Color(0xFF007BF5) else Color(0xFFE0E0E0), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = Color(0xFF007BF5))
+            Icon(
+                icon, 
+                contentDescription = null, 
+                tint = if (isSelected) Color.White else Color(0xFF007BF5)
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(name, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text(
+            name, 
+            fontSize = 12.sp, 
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) Color(0xFF007BF5) else Color.Black
+        )
     }
 }
 
