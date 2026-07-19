@@ -8,26 +8,35 @@ def get_job_details(url):
     """Fetch and parse comprehensive details from an individual job page."""
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        print(f"Fetching full details from: {url}")
+        print(f"Fetching full details and direct apply link from: {url}")
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
-            return "మరిన్ని వివరాలు నోటిఫికేషన్లో చూడండి"
+            return "మరిన్ని వివరాలు నోటిఫికేషన్లో చూడండి", url
 
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # FreeJobAlert usually puts main content in a specific div
-        # We'll extract common sections like Qualification, Age Limit, Fee, etc.
+        # 1. FIND DIRECT APPLY LINK (Targeting official websites)
+        direct_apply_link = url # Default to detail page
+        # FreeJobAlert usually has a table with "Apply Online" or "Official Website" links
+        link_table = soup.find('table', {'class': 'vtable'}) or soup.find('table')
+        if link_table:
+            for link in link_table.find_all('a'):
+                link_text = link.text.lower()
+                if "click here" in link_text or "apply online" in link_text or "official website" in link_text:
+                    href = link.get('href', '')
+                    # We want links that DON'T lead back to freejobalert.com if possible
+                    if href and "freejobalert" not in href:
+                        direct_apply_link = href
+                        break
+
+        # 2. EXTRACT DETAILS
         content = soup.find('div', {'class': 'post-content'}) or soup.find('article')
         if not content:
-            return "వివరాలు అందుబాటులో లేవు. దయచేసి వెబ్సైట్ చూడండి."
+            return "వివరాలు అందుబాటులో లేవు. దయచేసి వెబ్సైట్ చూడండి.", direct_apply_link
 
         extracted_text = []
-
-        # Look for headers and their subsequent content
         targets = ["Age Limit", "Qualification", "Application Fee", "Vacancy Details", "Important Dates"]
 
-        # This is a simplified extraction. In a real production app,
-        # you'd use a more robust parser for different table structures.
         for tag in content.find_all(['h2', 'h3', 'p', 'table', 'li']):
             text = tag.text.strip()
             if any(t in text for t in targets):
@@ -35,24 +44,22 @@ def get_job_details(url):
             elif tag.name == 'li':
                 extracted_text.append(f"• {text}")
             elif tag.name == 'table':
-                # Simplified table to text conversion
                 for row in tag.find_all('tr'):
                     cells = [c.text.strip() for c in row.find_all(['td', 'th'])]
                     extracted_text.append(" | ".join(cells))
             else:
-                if len(text) > 10: # Avoid noise
+                if len(text) > 10:
                     extracted_text.append(text)
 
-        # Join with newlines and clean up
-        full_details = "\n".join(extracted_text[:20]) # Limit length for CSV
-        return full_details if full_details.strip() else "వివరాల కోసం కింద ఉన్న బటన్ నొక్కండి."
+        full_details = "\n".join(extracted_text[:20])
+        return full_details if full_details.strip() else "వివరాల కోసం కింద ఉన్న బటన్ నొక్కండి.", direct_apply_link
 
     except Exception as e:
         print(f"Error fetching details: {e}")
-        return "వివరాలు లోడ్ చేయడంలో లోపం కలిగింది."
+        return "వివరాలు లోడ్ చేయడంలో లోపం కలిగింది.", url
 
 def scrape_jobs():
-    print("Starting Comprehensive Job Scraper...")
+    print("Starting Direct-Link Job Scraper...")
 
     sources = [
         {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "category": "AP Govt", "district": "Andhra Pradesh"},
@@ -73,7 +80,7 @@ def scrape_jobs():
 
             if not table: continue
 
-            rows = table.find_all('tr')[1:6] # Fetch fewer jobs but deeper details for each
+            rows = table.find_all('tr')[1:6]
 
             for row in rows:
                 cols = row.find_all('td')
@@ -85,23 +92,25 @@ def scrape_jobs():
                     vacancies = cols[2].text.strip()
                     last_date = cols[1].text.strip()
 
+                    detail_page_url = ""
                     link_tag = title_cell.find('a')
-                    apply_link = link_tag['href'] if link_tag and 'href' in link_tag.attrs else source['url']
+                    if link_tag:
+                        detail_page_url = link_tag.get('href', '')
 
-                    # Fetch deep details from the individual post page
-                    # WARNING: This makes the scraper slower but satisfies the user's request
-                    deep_details = get_job_details(apply_link)
+                    if detail_page_url:
+                        # Fetch deep details AND the direct application link
+                        deep_details, direct_link = get_job_details(detail_page_url)
 
-                    jobs_data.append({
-                        'Title': f"{title_text} - తాజా అప్డేట్",
-                        'Category': source['category'],
-                        'Vacancies': vacancies,
-                        'LastDate': last_date,
-                        'District': source['district'],
-                        'ApplyLink': apply_link,
-                        'Details': deep_details
-                    })
-                    time.sleep(1) # Be nice to server
+                        jobs_data.append({
+                            'Title': f"{title_text} - తాజా అప్డేట్",
+                            'Category': source['category'],
+                            'Vacancies': vacancies,
+                            'LastDate': last_date,
+                            'District': source['district'],
+                            'ApplyLink': direct_link, # NOW SAVING DIRECT GOVT LINK
+                            'Details': deep_details
+                        })
+                        time.sleep(1)
 
         except Exception as e:
             print(f"Error scraping {source['category']}: {e}")
@@ -112,7 +121,7 @@ def scrape_jobs():
         writer.writeheader()
         writer.writerows(jobs_data)
 
-    print(f"Successfully scraped {len(jobs_data)} jobs with full details.")
+    print(f"Successfully scraped {len(jobs_data)} jobs with direct apply links.")
 
 if __name__ == "__main__":
     scrape_jobs()
