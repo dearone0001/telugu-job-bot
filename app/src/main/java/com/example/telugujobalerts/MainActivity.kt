@@ -38,6 +38,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.volley.Request
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
+import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
@@ -45,6 +46,7 @@ import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import android.util.Log
 import org.json.JSONObject
 
 data class StructuredJobModel(
@@ -210,6 +212,14 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                         AdView(ctx).apply {
                             setAdSize(AdSize.BANNER)
                             setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
+                            adListener = object : AdListener() {
+                                override fun onAdFailedToLoad(error: LoadAdError) {
+                                    Log.e("AdMob", "Banner failed: ${error.message} (Code: ${error.code})")
+                                }
+                                override fun onAdLoaded() {
+                                    Log.d("AdMob", "Banner loaded successfully")
+                                }
+                            }
                             loadAd(AdRequest.Builder().build())
                         }
                     })
