@@ -2,29 +2,66 @@ import os
 import json
 import requests
 from bs4 import BeautifulSoup
+import time
 
-# Switched URL target to include both All-India Central Govt packages and banking feeds
 URL = "https://www.freejobalert.com/central-government-jobs/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
 
-def scrape_structured_details(job_url):
-    """Generates precise sample structured data matching the exact required view layout"""
-    age_text = "Age Limit\n\nCandidates must satisfy the baseline eligibility parameters for central recruitment cycles.\n\n• Minimum Age: 18/21 Years (depending on post classification).\n• Maximum Age: 30/35/47 Years as on calculated date.\n• Standard relaxation windows apply for SC/ST/OBC/PwD tiers across all India cadres."
-    qual_text = "Educational Qualification\n\n• Matriculation (10th) / Higher Secondary (10+2) pass from a recognized board.\n• Graduation / Bachelor's Degree / B.E. / B.Tech or equivalent professional qualification.\n\nOther Eligibility Conditions\n• The candidate must be a citizen of India.\n• Open to applicants from all States and Union Territories."
-    table_text = "Section/Paper|Duration|No. of Questions|Total Marks|Type\nTier-I (CBE)|2 hours|100|200|Objective Multiple Choice\nTier-II (CBE)|2 hours 30 minutes|120|300|Objective & Descriptive"
-    inst_text = "Important Instructions\n\n• Applications must be submitted strictly via the online digital registration portal.\n• Forms with unclear photographs or missing document uploads face immediate summary rejection.\n• Negative marking rules apply as per individual board directives."
-    links_text = "Apply Online|Official Central Notification PDF|Official Recruitment Board Website|Join Telegram Channel"
+def get_job_details(url):
+    """Fetch and parse comprehensive details from an individual job page."""
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code != 200:
+            return {}
 
-    return {
-        "age_limit": age_text,
-        "qualification": qual_text,
-        "pattern_table": table_text,
-        "instructions": inst_text,
-        "links": links_text
-    }
+        soup = BeautifulSoup(response.text, 'html.parser')
+        content = soup.find('div', {'class': 'post-content'}) or soup.find('article')
+        if not content:
+            return {}
+
+        details = {
+            "age_limit": "Refer to official notification.",
+            "qualification": "Refer to official notification.",
+            "pattern_table": "",
+            "instructions": "Follow official website instructions.",
+            "links": f"Official Website:{url}",
+            "application_fee": "Check notification for fee details.",
+            "selection_process": "Written Test / Interview"
+        }
+
+        # Simple heuristic extraction
+        sections = content.find_all(['h2', 'h3', 'p', 'table', 'li'])
+        for i, tag in enumerate(sections):
+            text = tag.text.strip().lower()
+            if "age limit" in text:
+                details["age_limit"] = sections[i+1].text.strip() if i+1 < len(sections) else details["age_limit"]
+            elif "qualification" in text:
+                details["qualification"] = sections[i+1].text.strip() if i+1 < len(sections) else details["qualification"]
+            elif "application fee" in text:
+                details["application_fee"] = sections[i+1].text.strip() if i+1 < len(sections) else details["application_fee"]
+            elif "selection process" in text:
+                details["selection_process"] = sections[i+1].text.strip() if i+1 < len(sections) else details["selection_process"]
+            elif tag.name == 'table':
+                rows_list = []
+                for row in tag.find_all('tr'):
+                    cells = [c.text.strip() for c in row.find_all(['td', 'th'])]
+                    rows_list.append("|".join(cells))
+                details["pattern_table"] = "\n".join(rows_list)
+
+        # Extract links
+        links_list = []
+        for a in content.find_all('a'):
+            if any(kw in a.text.lower() for kw in ["apply online", "notification", "official website"]):
+                links_list.append(f"{a.text.strip()}:{a['href']}")
+        if links_list:
+            details["links"] = "|".join(links_list[:5])
+
+        return details
+    except Exception:
+        return {}
 
 def scrape_jobs():
-    print("Executing stable All-India Central JSON crawl...")
+    print("Executing Deep All-India Central JSONL crawl...")
     try:
         response = requests.get(URL, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -32,55 +69,46 @@ def scrape_jobs():
         return []
 
     scraped_items = []
-    # Find the main job table
     table = soup.find('table', {'class': 'vtable'})
     if not table:
         return []
 
     table_rows = table.find_all('tr')
-
-    # Parse central notice board rows
-    for row in table_rows[:25]:
+    for row in table_rows[:15]:
         cells = row.find_all('td')
         if len(cells) >= 3:
-            raw_title = cells[0].text.strip()
-            apply_url = cells[0].find('a')['href'] if cells[0].find('a') else "https://ssc.gov.in"
+            title_cell = cells[0]
+            raw_title = title_cell.text.strip()
+            apply_url = title_cell.find('a')['href'] if title_cell.find('a') else None
             deadline = cells[2].text.strip()
+            post_date = cells[1].text.strip() if len(cells) > 1 else ""
 
-            # Filters items containing standard recruitment keyword patterns
-            if any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
-                # Clean up and categorize into All India/Central profiles
-                if "SSC" in raw_title:
-                    title_text = f"SSC All India Recruitment ({raw_title[:35]}...)"
-                    cat = "Central Govt"
-                elif "Railway" in raw_title or "RRB" in raw_title:
-                    title_text = f"రైల్వే రిక్రూట్మెంట్ (RRB Jobs) ({raw_title[:35]}...)"
-                    cat = "Central Govt"
-                elif "UPSC" in raw_title:
-                    title_text = f"UPSC National Level Exam ({raw_title[:35]}...)"
-                    cat = "Central Govt"
-                elif "Bank" in raw_title or "IBPS" in raw_title:
-                    title_text = f"బ్యాంక్ ఉద్యోగాల సమాచారం (Bank Jobs) ({raw_title[:35]}...)"
-                    cat = "Banking"
-                else:
-                    title_text = f"Central Job Alert: {raw_title[:45]}..."
-                    cat = "Central Govt"
+            if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
+                print(f"Deep scraping: {raw_title[:30]}...")
+                details = get_job_details(apply_url)
 
-                details = scrape_structured_details(apply_url)
+                cat = "Central Govt"
+                if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
+                elif "SSC" in raw_title: cat = "SSC"
+                elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
 
                 item_node = {
-                    "title": title_text,
+                    "title": raw_title,
                     "category": cat,
-                    "vacancies": "Check Details",
+                    "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
                     "last_date": deadline if len(deadline) > 2 else "TBA",
-                    "district": "All India",  # Changes targeted district display scope universally
-                    "age_limit": details["age_limit"],
-                    "qualification": details["qualification"],
-                    "pattern_table": details["pattern_table"],
-                    "instructions": details["instructions"],
-                    "links": details["links"]
+                    "district": "All India",
+                    "age_limit": details.get("age_limit", ""),
+                    "qualification": details.get("qualification", ""),
+                    "pattern_table": details.get("pattern_table", ""),
+                    "instructions": details.get("instructions", ""),
+                    "links": details.get("links", ""),
+                    "application_fee": details.get("application_fee", ""),
+                    "selection_process": details.get("selection_process", ""),
+                    "post_date": post_date
                 }
                 scraped_items.append(item_node)
+                time.sleep(1) # Be respectful
 
     return scraped_items
 
@@ -90,4 +118,4 @@ if __name__ == "__main__":
         with open('jobs.jsonl', 'w', encoding='utf-8') as f:
             for item in job_list:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        print("jobs.jsonl database refreshed with All-India positions!")
+        print(f"jobs.jsonl refreshed with {len(job_list)} All-India positions!")

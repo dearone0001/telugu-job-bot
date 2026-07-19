@@ -56,7 +56,8 @@ data class StructuredJobModel(
     val title: String, val category: String, val vacancies: String,
     val lastDate: String, val district: String,
     val ageLimit: String, val qualification: String,
-    val patternTable: String, val instructions: String, val links: String
+    val patternTable: String, val instructions: String, val links: String,
+    val applicationFee: String = "", val selectionProcess: String = "", val postDate: String = ""
 )
 
 class MainActivity : ComponentActivity() {
@@ -93,7 +94,6 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     var isFetchingData by remember { mutableStateOf(false) }
     var selectedJob by remember { mutableStateOf<StructuredJobModel?>(null) }
     var searchText by remember { mutableStateOf("") }
-    var selectedNavIndex by remember { mutableIntStateOf(0) }
     var selectedCategory by remember { mutableStateOf("All") }
     var interstitialAd by remember { mutableStateOf<InterstitialAd?>(null) }
 
@@ -145,7 +145,10 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                             qualification = json.optString("qualification"),
                             patternTable = json.optString("pattern_table"),
                             instructions = json.optString("instructions"),
-                            links = json.optString("links")
+                            links = json.optString("links"),
+                            applicationFee = json.optString("application_fee"),
+                            selectionProcess = json.optString("selection_process"),
+                            postDate = json.optString("post_date")
                         )
                     )
                 } catch (e: Exception) {}
@@ -223,50 +226,22 @@ fun JobDashboardScreen(activity: ComponentActivity) {
             }
         },
         bottomBar = {
-            Column(modifier = Modifier.background(Color.White.copy(alpha = 0.5f))) {
-                Box(modifier = Modifier.fillMaxWidth().wrapContentHeight().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
-                    AndroidView(modifier = Modifier.fillMaxWidth(), factory = { ctx ->
-                        AdView(ctx).apply {
-                            setAdSize(AdSize.BANNER)
-                            setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
-                            adListener = object : AdListener() {
-                                override fun onAdFailedToLoad(error: LoadAdError) {
-                                    Log.e("AdMob", "Banner failed: ${error.message} (Code: ${error.code})")
-                                }
-                                override fun onAdLoaded() {
-                                    Log.d("AdMob", "Banner loaded successfully")
-                                }
+            Box(modifier = Modifier.fillMaxWidth().wrapContentHeight().background(Color.White.copy(alpha = 0.5f)).padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                AndroidView(modifier = Modifier.fillMaxWidth(), factory = { ctx ->
+                    AdView(ctx).apply {
+                        setAdSize(AdSize.BANNER)
+                        setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
+                        adListener = object : AdListener() {
+                            override fun onAdFailedToLoad(error: LoadAdError) {
+                                Log.e("AdMob", "Banner failed: ${error.message} (Code: ${error.code})")
                             }
-                            loadAd(AdRequest.Builder().build())
+                            override fun onAdLoaded() {
+                                Log.d("AdMob", "Banner loaded successfully")
+                            }
                         }
-                    })
-                }
-                NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
-                    NavigationBarItem(
-                        selected = selectedNavIndex == 0,
-                        onClick = { selectedNavIndex = 0 },
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                        label = { Text("Home") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedNavIndex == 1,
-                        onClick = { selectedNavIndex = 1 },
-                        icon = { Icon(Icons.Default.Work, contentDescription = "Jobs") },
-                        label = { Text("Jobs") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedNavIndex == 2,
-                        onClick = { selectedNavIndex = 2 },
-                        icon = { Icon(Icons.Default.Notifications, contentDescription = "Alerts") },
-                        label = { Text("Alerts") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedNavIndex == 3,
-                        onClick = { selectedNavIndex = 3 },
-                        icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                        label = { Text("Profile") }
-                    )
-                }
+                        loadAd(AdRequest.Builder().build())
+                    }
+                })
             }
         }
     ) { padding ->
@@ -364,10 +339,15 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = "• ${activeJob.district}", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                 }
+                if (activeJob.postDate.isNotEmpty()) {
+                    Text(text = "Posted on: ${activeJob.postDate}", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                }
                 Spacer(modifier = Modifier.height(24.dp))
                 
+                GlassySection(title = "Application Fee", content = activeJob.applicationFee)
                 GlassySection(title = "Age Limit", content = activeJob.ageLimit)
                 GlassySection(title = "Educational Qualification", content = activeJob.qualification)
+                GlassySection(title = "Selection Process", content = activeJob.selectionProcess)
                 
                 if (activeJob.patternTable.isNotEmpty()) {
                     Text(text = "Written Examination Pattern", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007BF5))
