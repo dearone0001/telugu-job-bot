@@ -10,12 +10,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -66,6 +67,9 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     val listState = remember { mutableStateListOf<JobModel>() }
     var isFetchingData by remember { mutableStateOf(false) }
     var interstitialAd by remember { mutableStateOf<InterstitialAd?>(null) }
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedJob by remember { mutableStateOf<JobModel?>(null) }
+    val tabs = listOf("All India", "AP/TS", "Banking", "SSC/RRB")
 
     fun loadInterstitial() {
         val adRequest = AdRequest.Builder().build()
@@ -83,19 +87,12 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     fun showInterstitial(onAdDismissed: () -> Unit) {
         if (interstitialAd != null) {
             interstitialAd?.show(activity)
-            loadInterstitial() // Load next ad
+            loadInterstitial()
             onAdDismissed()
         } else {
             onAdDismissed()
         }
     }
-
-    // 🔗 Data endpoint for job listings
-    // val dataEndpoint = "https://raw.githubusercontent.com/dearone0001/telugu-job-bot/main/jobs.csv"
-    val dataEndpoint = "https://raw.githubusercontent.com/dearone0001/telugu-job-bot/main/jobs.csv" // Keep this for production, but notice the 404 in logs.
-    
-    // For local testing or if GitHub is failing, ensure the URL is correct or use a fallback.
-    // If you just created the repo, make sure to push jobs.csv to the 'main' branch.
 
     fun loadData() {
         isFetchingData = true
@@ -131,10 +128,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
 
         val request = StringRequest(Request.Method.GET, dataEndpoint,
             { response -> parseCsv(response) },
-            { 
-                // Fallback to local data if GitHub returns 404 or fails
-                loadLocalData()
-            }
+            { loadLocalData() }
         )
         queue.add(request)
     }
@@ -144,198 +138,272 @@ fun JobDashboardScreen(activity: ComponentActivity) {
         loadInterstitial()
     }
 
-    Scaffold(
-        topBar = {
-            LargeTopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            "Telugu Job Alerts",
-                            fontWeight = FontWeight.ExtraBold,
-                            style = MaterialTheme.typography.headlineMedium
+    val filteredJobs = when (selectedTab) {
+        0 -> listState.filter { it.category.contains("Central", true) || it.district.contains("India", true) }
+        1 -> listState.filter { it.category.contains("AP", true) || it.category.contains("TS", true) || it.district.contains("Pradesh", true) || it.district.contains("Telangana", true) }
+        2 -> listState.filter { it.category.contains("Bank", true) }
+        3 -> listState.filter { it.category.contains("SSC", true) || it.category.contains("Railway", true) || it.category.contains("RRB", true) }
+        else -> listState
+    }
+
+    if (selectedJob != null) {
+        JobDetailsScreen(job = selectedJob!!, onBack = { selectedJob = null })
+    } else {
+        Scaffold(
+            topBar = {
+                Column(modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer)) {
+                    CenterAlignedTopAppBar(
+                        title = {
+                            Text(
+                                "Free Job Alert Telugu",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        },
+                        actions = {
+                            IconButton(onClick = { /* TODO: Search */ }) {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
+                            IconButton(onClick = { showInterstitial { loadData() } }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                            }
+                        },
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                            containerColor = Color.Transparent
                         )
-                        Text(
-                            "ఉద్యోగ సమాచారం",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* TODO: Search */ }) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
-                    }
-                    IconButton(onClick = { showInterstitial { loadData() } }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                },
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            )
-        },
-        bottomBar = {
-            Column {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(vertical = 4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AndroidView(modifier = Modifier.fillMaxWidth(), factory = { ctx ->
-                        AdView(ctx).apply {
-                            setAdSize(AdSize.BANNER)
-                            setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
-                            loadAd(AdRequest.Builder().build())
-                        }
-                    })
-                }
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 8.dp
-                ) {
-                    NavigationBarItem(
-                        selected = true,
-                        onClick = { },
-                        icon = { Icon(Icons.Default.Notifications, contentDescription = "Jobs") },
-                        label = { Text("Jobs") }
                     )
-                    // Add more items here as your app grows
+                    ScrollableTabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        edgePadding = 16.dp,
+                        divider = {}
+                    ) {
+                        tabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTab == index,
+                                onClick = { selectedTab = index },
+                                text = { 
+                                    Text(
+                                        text = title,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            bottomBar = {
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AndroidView(modifier = Modifier.fillMaxWidth(), factory = { ctx ->
+                            AdView(ctx).apply {
+                                setAdSize(AdSize.BANNER)
+                                setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
+                                loadAd(AdRequest.Builder().build())
+                            }
+                        })
+                    }
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 8.dp
+                    ) {
+                        NavigationBarItem(
+                            selected = true,
+                            onClick = { },
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                            label = { Text("Home") }
+                        )
+                        NavigationBarItem(
+                            selected = false,
+                            onClick = { },
+                            icon = { Icon(Icons.Default.Notifications, contentDescription = "Alerts") },
+                            label = { Text("Alerts") }
+                        )
+                        NavigationBarItem(
+                            selected = false,
+                            onClick = { },
+                            icon = { Icon(Icons.Default.Favorite, contentDescription = "Saved") },
+                            label = { Text("Saved") }
+                        )
+                    }
                 }
             }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            Text(
-                text = "తాజా ఉద్యోగాలు (Latest Jobs)",
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 16.dp)
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .background(Color(0xFFF5F5F5))
             ) {
-                items(listState) { job ->
-                    ModernJobCard(job, context)
+                if (filteredJobs.isEmpty() && !isFetchingData) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No jobs found in this category.", color = Color.Gray)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(filteredJobs) { job ->
+                            FreeJobAlertCard(job, onClick = { selectedJob = job })
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ModernJobCard(job: JobModel, context: android.content.Context) {
+fun JobDetailsScreen(job: JobModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Job Details", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            Text(text = job.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            DetailRow("Category", job.category)
+            DetailRow("District", job.district)
+            DetailRow("Vacancies", job.vacancies)
+            DetailRow("Last Date", job.lastDate)
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(text = "Notification Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = job.details, style = MaterialTheme.typography.bodyLarge)
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(job.applyLink))
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Apply Online (Official Website)", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun DetailRow(label: String, value: String) {
+    Row(modifier = Modifier.padding(vertical = 4.dp)) {
+        Text(text = "$label: ", fontWeight = FontWeight.Bold, color = Color.Gray)
+        Text(text = value, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun FreeJobAlertCard(job: JobModel, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .clickable {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(job.applyLink))
-                context.startActivity(intent)
-            },
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Icon Placeholder
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = job.category.firstOrNull()?.toString() ?: "J",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = job.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = job.category,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = job.district,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-                
-                if (job.details.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = job.details,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Surface(
+                    color = when {
+                        job.category.contains("AP", true) -> Color(0xFFFFEBEE)
+                        job.category.contains("Bank", true) -> Color(0xFFE3F2FD)
+                        else -> Color(0xFFF3E5F5)
+                    },
+                    shape = RoundedCornerShape(4.dp)
                 ) {
                     Text(
-                        text = "చివరి తేదీ: ${job.lastDate}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    
-                    Icon(
-                        imageVector = Icons.Default.Search, // Replace with "ArrowForward" if available
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        text = job.category,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = when {
+                            job.category.contains("AP", true) -> Color(0xFFC62828)
+                            job.category.contains("Bank", true) -> Color(0xFF1565C0)
+                            else -> Color(0xFF7B1FA2)
+                        },
+                        fontWeight = FontWeight.Bold
                     )
                 }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = job.lastDate,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = job.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                Text(text = job.district, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Spacer(modifier = Modifier.width(12.dp))
+                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                Text(text = "${job.vacancies} Posts", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+            
+            if (job.details.isNotEmpty()) {
+                Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0xFFEEEEEE))
+                Text(
+                    text = job.details,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.DarkGray,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Button(
+                onClick = onClick,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("Get Details", fontWeight = FontWeight.Bold)
             }
         }
     }
