@@ -197,15 +197,31 @@ fun JobDashboardScreen(activity: ComponentActivity) {
         
         // Client-side expiry check for safety
         val isNotExpired = try {
-            val dateParts = job.lastDate.split("-")
-            if (dateParts.size == 3) {
-                val year = dateParts[0].toInt()
-                val month = dateParts[1].toInt()
-                val day = dateParts[2].toInt()
-                val expiry = java.util.Calendar.getInstance().apply { set(year, month - 1, day) }
-                expiry.timeInMillis >= System.currentTimeMillis()
+            val dateStr = job.lastDate.trim()
+            if (dateStr.isNotEmpty() && !dateStr.contains("TBA", true)) {
+                val parts = if (dateStr.contains("-")) dateStr.split("-") else dateStr.split("/")
+                if (parts.size == 3) {
+                    val (y, m, d) = if (parts[0].length == 4) {
+                        // YYYY-MM-DD
+                        Triple(parts[0].toInt(), parts[1].toInt(), parts[2].split(" ")[0].toInt())
+                    } else {
+                        // DD-MM-YYYY
+                        Triple(parts[2].split(" ")[0].toInt(), parts[1].toInt(), parts[0].toInt())
+                    }
+                    val expiry = java.util.Calendar.getInstance().apply { 
+                        set(java.util.Calendar.YEAR, y)
+                        set(java.util.Calendar.MONTH, m - 1)
+                        set(java.util.Calendar.DAY_OF_MONTH, d)
+                        set(java.util.Calendar.HOUR_OF_DAY, 23)
+                        set(java.util.Calendar.MINUTE, 59)
+                    }
+                    expiry.timeInMillis >= System.currentTimeMillis()
+                } else true
             } else true
-        } catch (e: Exception) { true }
+        } catch (e: Exception) { 
+            Log.e("TeluguJobAlerts", "Date parse error: ${job.lastDate}", e)
+            true 
+        }
 
         matchesSearch && matchesCategory && isNotExpired
     }.sortedByDescending { it.postDate }
