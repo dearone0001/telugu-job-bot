@@ -3,10 +3,27 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import time
+from datetime import datetime
 
-# Targeting the absolute latest notifications for 2025/2026 data
+# Targeting the absolute latest notifications
 URL = "https://www.freejobalert.com/latest-notifications/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+
+def is_expired(date_str):
+    """Checks if a job's last date has passed."""
+    if not date_str or "TBA" in date_str or "Advt" in date_str:
+        return False
+    try:
+        # Try common date formats found on FreeJobAlert
+        for fmt in ('%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y'):
+            try:
+                expiry_date = datetime.strptime(date_str.strip(), fmt)
+                return expiry_date < datetime.now()
+            except ValueError:
+                continue
+        return False
+    except:
+        return False
 
 def get_job_details(url):
     """Fetch and parse comprehensive details from an individual job page."""
@@ -33,7 +50,6 @@ def get_job_details(url):
 
         sections = content.find_all(['h2', 'h3', 'p', 'table', 'li', 'span', 'strong'])
 
-        # Description extraction
         for p in content.find_all('p'):
             text = p.text.strip()
             if len(text) > 100 and "recruitment" in text.lower():
@@ -57,22 +73,16 @@ def get_job_details(url):
                     rows_list.append("|".join(cells))
                 details["pattern_table"] = "\n".join(rows_list)
 
-        # Improved Link Extraction - finding official sources
         links_dict = {}
         for a in content.find_all('a'):
             link_text = a.text.strip().lower()
             href = a.get('href', '')
             if not href or href.startswith('#'): continue
+            if href.startswith('/'): href = "https://www.freejobalert.com" + href
 
-            if href.startswith('/'):
-                href = "https://www.freejobalert.com" + href
-
-            if "notification" in link_text:
-                links_dict["Official Notification"] = href
-            elif "apply online" in link_text:
-                links_dict["Apply Online"] = href
-            elif "official website" in link_text:
-                links_dict["Official Website"] = href
+            if "notification" in link_text: links_dict["Official Notification"] = href
+            elif "apply online" in link_text: links_dict["Apply Online"] = href
+            elif "official website" in link_text: links_dict["Official Website"] = href
 
         if links_dict:
             details["links"] = "|".join([f"{k}:{v}" for k, v in links_dict.items()])
@@ -84,7 +94,7 @@ def get_job_details(url):
         return {}
 
 def scrape_jobs():
-    print("Executing Latest Jobs JSONL crawl (2025/2026)...")
+    print(f"Scraping Latest Non-Expired Jobs at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}...")
     try:
         response = requests.get(URL, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -92,13 +102,11 @@ def scrape_jobs():
         return []
 
     scraped_items = []
-    # Latest notification tables on this page
     tables = soup.find_all('table', {'class': 'vtable'})
     if not tables:
         return []
 
-    # Process all major tables (Central, State, etc.)
-    for table in tables[:3]:
+    for table in tables[:5]:
         table_rows = table.find_all('tr')
         for row in table_rows:
             cells = row.find_all('td')
@@ -109,11 +117,14 @@ def scrape_jobs():
                 deadline = cells[2].text.strip()
                 post_date = cells[1].text.strip() if len(cells) > 1 else ""
 
+                # Skip expired jobs
+                if is_expired(deadline):
+                    continue
+
                 if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
-                    print(f"Deep scraping: {raw_title[:30]}...")
+                    print(f"Checking: {raw_title[:30]}...")
                     details = get_job_details(apply_url)
 
-                    # Dynamic categorization
                     cat = "Job Alert"
                     if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
                     elif "SSC" in raw_title: cat = "SSC"
@@ -124,7 +135,7 @@ def scrape_jobs():
                         "title": raw_title,
                         "category": cat,
                         "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
-                        "last_date": deadline if len(deadline) > 2 else "TBA",
+                        "last_date": deadline,
                         "district": "All India",
                         "age_limit": details.get("age_limit", ""),
                         "qualification": details.get("qualification", ""),
@@ -137,10 +148,10 @@ def scrape_jobs():
                         "job_description": details.get("job_description", "")
                     }
                     scraped_items.append(item_node)
-                    time.sleep(1) # Be respectful
+                    time.sleep(1)
 
-                    if len(scraped_items) >= 25: break # Cap at 25 latest jobs
-        if len(scraped_items) >= 25: break
+                    if len(scraped_items) >= 40: break
+        if len(scraped_items) >= 40: break
 
     return scraped_items
 
@@ -150,4 +161,6 @@ if __name__ == "__main__":
         with open('jobs.jsonl', 'w', encoding='utf-8') as f:
             for item in job_list:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        print(f"jobs.jsonl refreshed with {len(job_list)} latest positions.")
+        print(f"jobs.jsonl refreshed with {len(job_list)} ACTIVE positions.")
+    else:
+        print("No active jobs found at this time.")
