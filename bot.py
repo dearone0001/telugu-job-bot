@@ -5,12 +5,19 @@ from bs4 import BeautifulSoup
 import time
 from datetime import datetime
 
-# Targeting the absolute latest notifications
-URL = "https://www.freejobalert.com/latest-notifications/"
+# Targeting multiple high-volume source pages for All India coverage
+SOURCES = [
+    {"url": "https://www.freejobalert.com/bank-jobs/", "cat": "Banking"},
+    {"url": "https://www.freejobalert.com/latest-notifications/", "cat": "General"},
+    {"url": "https://www.freejobalert.com/ssc-jobs/", "cat": "SSC"},
+    {"url": "https://www.freejobalert.com/railway-jobs/", "cat": "Railways"},
+    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "State Govt"},
+    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "State Govt"}
+]
+
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
 
 def parse_date(date_str):
-    """Normalizes date strings to YYYY-MM-DD for reliable sorting."""
     if not date_str or any(x in date_str.upper() for x in ["TBA", "ADVT", "NA"]):
         return ""
     try:
@@ -24,7 +31,6 @@ def parse_date(date_str):
         return ""
 
 def is_expired(date_str):
-    """Checks if a job's last date has passed."""
     iso_date = parse_date(date_str)
     if not iso_date:
         return False
@@ -35,33 +41,24 @@ def is_expired(date_str):
         return False
 
 def get_job_details(url):
-    """Fetch and parse comprehensive details from an individual job page."""
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
-        if response.status_code != 200:
-            return {}
-
+        if response.status_code != 200: return {}
         soup = BeautifulSoup(response.text, 'html.parser')
         content = soup.find('div', {'class': 'post-content'}) or soup.find('article')
-        if not content:
-            return {}
+        if not content: return {}
 
         details = {
-            "age_limit": "Refer to official notification.",
-            "qualification": "Refer to official notification.",
-            "pattern_table": "",
-            "instructions": "Follow official website instructions.",
-            "links": "",
-            "application_fee": "Check notification for fee details.",
-            "selection_process": "Written Test / Interview",
-            "job_description": "Detailed notification available on the official website."
+            "age_limit": "Refer notification.", "qualification": "Refer notification.",
+            "pattern_table": "", "instructions": "Apply online.", "links": "",
+            "application_fee": "Check details.", "selection_process": "Test/Interview",
+            "job_description": "Detailed info on official site."
         }
 
         sections = content.find_all(['h2', 'h3', 'p', 'table', 'li', 'span', 'strong'])
-
         for p in content.find_all('p'):
             text = p.text.strip()
-            if len(text) > 100 and "recruitment" in text.lower():
+            if len(text) > 80 and "recruitment" in text.lower():
                 details["job_description"] = text
                 break
 
@@ -88,7 +85,6 @@ def get_job_details(url):
             href = a.get('href', '')
             if not href or href.startswith('#'): continue
             if href.startswith('/'): href = "https://www.freejobalert.com" + href
-
             if "notification" in link_text: links_dict["Official Notification"] = href
             elif "apply online" in link_text: links_dict["Apply Online"] = href
             elif "official website" in link_text: links_dict["Official Website"] = href
@@ -99,83 +95,71 @@ def get_job_details(url):
             details["links"] = f"Official Source:{url}"
 
         return details
-    except Exception:
+    except:
         return {}
 
 def scrape_jobs():
-    print(f"Scraping Latest Non-Expired Jobs at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}...")
-    try:
-        response = requests.get(URL, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(response.text, 'html.parser')
-    except:
-        return []
-
+    print(f"Starting Multi-Source Scrape at {datetime.now()}...")
     scraped_items = []
-    tables = soup.find_all('table', {'class': 'vtable'})
-    if not tables:
-        return []
+    seen_titles = set()
 
-    for table in tables[:5]:
-        table_rows = table.find_all('tr')
-        for row in table_rows:
-            cells = row.find_all('td')
-            if len(cells) >= 3:
-                title_cell = cells[0]
-                raw_title = title_cell.text.strip()
-                apply_url = title_cell.find('a')['href'] if title_cell.find('a') else None
-                raw_deadline = cells[2].text.strip()
-                raw_post_date = cells[1].text.strip() if len(cells) > 1 else ""
+    for source in SOURCES:
+        try:
+            print(f"Scraping: {source['url']}...")
+            response = requests.get(source['url'], headers=HEADERS, timeout=15)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            tables = soup.find_all('table', {'class': 'vtable'})
+            if not tables: continue
 
-                # Skip expired jobs
-                if is_expired(raw_deadline):
-                    continue
+            for table in tables[:5]:
+                for row in table.find_all('tr'):
+                    cells = row.find_all('td')
+                    if len(cells) >= 3:
+                        title_cell = cells[0]
+                        raw_title = title_cell.text.strip()
+                        apply_url = title_cell.find('a')['href'] if title_cell.find('a') else None
+                        deadline = cells[2].text.strip()
+                        post_date = cells[1].text.strip() if len(cells) > 1 else ""
 
-                if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
-                    print(f"Deep scraping: {raw_title[:30]}...")
-                    details = get_job_details(apply_url)
+                        if raw_title in seen_titles: continue
+                        if is_expired(deadline): continue
 
-                    # Standardize dates for app-side sorting/filtering
-                    iso_deadline = parse_date(raw_deadline) or raw_deadline
-                    iso_post_date = parse_date(raw_post_date) or datetime.now().strftime('%Y-%m-%d')
+                        if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
+                            print(f"Deep scraping: {raw_title[:30]}...")
+                            details = get_job_details(apply_url)
 
-                    cat = "Job Alert"
-                    if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
-                    elif "SSC" in raw_title: cat = "SSC"
-                    elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
-                    elif "PSC" in raw_title: cat = "State Govt"
+                            iso_deadline = parse_date(deadline) or deadline
+                            iso_post_date = parse_date(post_date) or datetime.now().strftime('%Y-%m-%d')
 
-                    item_node = {
-                        "title": raw_title,
-                        "category": cat,
-                        "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
-                        "last_date": iso_deadline,
-                        "district": "All India",
-                        "age_limit": details.get("age_limit", ""),
-                        "qualification": details.get("qualification", ""),
-                        "pattern_table": details.get("pattern_table", ""),
-                        "instructions": details.get("instructions", ""),
-                        "links": details.get("links", ""),
-                        "application_fee": details.get("application_fee", ""),
-                        "selection_process": details.get("selection_process", ""),
-                        "post_date": iso_post_date,
-                        "job_description": details.get("job_description", "")
-                    }
-                    scraped_items.append(item_node)
-                    time.sleep(1)
+                            cat = source['cat']
+                            if "Bank" in raw_title or "IBPS" in raw_title or "SBI" in raw_title: cat = "Banking"
+                            elif "SSC" in raw_title: cat = "SSC"
+                            elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
+                            elif "PSC" in raw_title: cat = "State Govt"
 
-                    if len(scraped_items) >= 50: break
-        if len(scraped_items) >= 50: break
+                            scraped_items.append({
+                                "title": raw_title, "category": cat, "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
+                                "last_date": iso_deadline, "district": "All India" if source['cat'] != "State Govt" else "State Specific",
+                                "age_limit": details.get("age_limit", ""), "qualification": details.get("qualification", ""),
+                                "pattern_table": details.get("pattern_table", ""), "instructions": details.get("instructions", ""),
+                                "links": details.get("links", ""), "application_fee": details.get("application_fee", ""),
+                                "selection_process": details.get("selection_process", ""), "post_date": iso_post_date,
+                                "job_description": details.get("job_description", "")
+                            })
+                            seen_titles.add(raw_title)
+                            time.sleep(1)
+                            if len(scraped_items) >= 150: break
+                if len(scraped_items) >= 150: break
+        except Exception as e:
+            print(f"Error on {source['url']}: {e}")
 
     return scraped_items
 
 if __name__ == "__main__":
     job_list = scrape_jobs()
     if job_list:
-        # Sort by post_date descending before saving
         job_list.sort(key=lambda x: x['post_date'], reverse=True)
         with open('jobs.jsonl', 'w', encoding='utf-8') as f:
             for item in job_list:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        print(f"jobs.jsonl refreshed with {len(job_list)} ACTIVE positions.")
-    else:
-        print("No active jobs found at this time.")
+        print(f"Database refreshed with {len(job_list)} ACTIVE positions.")
