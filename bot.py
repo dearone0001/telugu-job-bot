@@ -5,19 +5,18 @@ from bs4 import BeautifulSoup
 import time
 from datetime import datetime
 
-# Comprehensive list of FreeJobAlert sources
+# Expanded list of sources focusing on "Full Jobs" for Andhra Pradesh and Telangana
 SOURCES = [
-    {"url": "https://www.freejobalert.com/latest-notifications/", "cat": "All"},
+    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "Andhra Pradesh"},
+    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "Telangana"},
+    {"url": "https://www.freejobalert.com/ap-teaching-jobs/", "cat": "Andhra Pradesh"},
+    {"url": "https://www.freejobalert.com/ts-teaching-jobs/", "cat": "Telangana"},
+    {"url": "https://www.freejobalert.com/ap-police-recruitment/", "cat": "Andhra Pradesh"},
+    {"url": "https://www.freejobalert.com/ts-police-recruitment/", "cat": "Telangana"},
     {"url": "https://www.freejobalert.com/bank-jobs/", "cat": "Banking"},
     {"url": "https://www.freejobalert.com/ssc-jobs/", "cat": "SSC"},
     {"url": "https://www.freejobalert.com/railway-jobs/", "cat": "Railways"},
-    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "Andhra Pradesh"},
-    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "Telangana"},
-    {"url": "https://www.freejobalert.com/teaching-jobs/", "cat": "State"},
-    {"url": "https://www.freejobalert.com/police-jobs/", "cat": "State"},
-    {"url": "https://www.freejobalert.com/central-government-jobs/", "cat": "State"}, # Repurposing Central to State as requested
-    {"url": "https://www.freejobalert.com/upsc-jobs/", "cat": "State"},
-    {"url": "https://www.freejobalert.com/defense-jobs/", "cat": "State"}
+    {"url": "https://www.freejobalert.com/latest-notifications/", "cat": "All"},
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
@@ -110,7 +109,7 @@ def get_job_details(url):
         return {}
 
 def scrape_jobs():
-    print(f"Starting Mega-Scrape at {datetime.now()}...")
+    print(f"Starting Multi-Portal Scrape at {datetime.now()}...")
     scraped_items = []
     seen_titles = set()
 
@@ -119,7 +118,6 @@ def scrape_jobs():
             print(f"Syncing: {source['url']}...")
             response = requests.get(source['url'], headers=HEADERS, timeout=15)
             soup = BeautifulSoup(response.text, 'html.parser')
-
             tables = soup.find_all('table', {'class': 'vtable'})
             if not tables: continue
 
@@ -137,27 +135,25 @@ def scrape_jobs():
                         if is_expired(deadline): continue
 
                         if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
-                            print(f"Deep scraping: {raw_title[:35]}...")
+                            print(f"Scraping: {raw_title[:35]}...")
                             details = get_job_details(apply_url)
 
                             iso_deadline = parse_date(deadline) or deadline
                             iso_post_date = parse_date(post_date) or datetime.now().strftime('%Y-%m-%d')
 
-                            # Map to exact app categories
+                            # Intelligent mapping
                             cat = source['cat']
-                            if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
-                            elif "SSC" in raw_title: cat = "SSC"
-                            elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
+                            dist = "All India"
 
-                            # Specific mapping for AP and TS
                             if "AP" in raw_title or "Andhra" in raw_title:
                                 dist = "Andhra Pradesh"
-                                if cat == "State": cat = "Andhra Pradesh"
+                                cat = "Andhra Pradesh"
                             elif "TS" in raw_title or "Telangana" in raw_title:
                                 dist = "Telangana"
-                                if cat == "State": cat = "Telangana"
-                            else:
-                                dist = "All India"
+                                cat = "Telangana"
+                            elif "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
+                            elif "SSC" in raw_title: cat = "SSC"
+                            elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
 
                             scraped_items.append({
                                 "title": raw_title,

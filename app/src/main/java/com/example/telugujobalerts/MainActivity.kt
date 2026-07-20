@@ -194,9 +194,14 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                           job.category.contains(searchText, ignoreCase = true)
         val matchesCategory = when (selectedCategory) {
             "All" -> true
-            "State" -> job.category.contains("State", ignoreCase = true) || 
-                       job.category.contains("Andhra", ignoreCase = true) || 
-                       job.category.contains("Telangana", ignoreCase = true)
+            "Andhra Pradesh" -> job.category.contains("Andhra", ignoreCase = true) || 
+                                job.district.contains("Andhra", ignoreCase = true) ||
+                                job.title.contains("AP ", ignoreCase = true) ||
+                                job.title.contains("APPSC", ignoreCase = true)
+            "Telangana" -> job.category.contains("Telangana", ignoreCase = true) || 
+                           job.district.contains("Telangana", ignoreCase = true) ||
+                           job.title.contains("TS ", ignoreCase = true) ||
+                           job.title.contains("TSPSC", ignoreCase = true)
             else -> job.category.contains(selectedCategory, ignoreCase = true)
         }
         
@@ -341,8 +346,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                             "Telangana" to Icons.Default.LocationOn,
                             "Banking" to Icons.Default.AccountBalance,
                             "Railways" to Icons.Default.Train,
-                            "SSC" to Icons.AutoMirrored.Filled.Assignment,
-                            "State" to Icons.Default.LocationCity
+                            "SSC" to Icons.AutoMirrored.Filled.Assignment
                         )
                         items(categories) { (name, icon) ->
                             GlassyCategoryItem(
