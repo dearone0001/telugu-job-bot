@@ -263,7 +263,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                 AndroidView(modifier = Modifier.fillMaxWidth(), factory = { ctx ->
                     AdView(ctx).apply {
                         setAdSize(AdSize.BANNER)
-                        adUnitId = AdConfig.BANNER_AD_UNIT_ID
+                        setAdUnitId(AdConfig.BANNER_AD_UNIT_ID)
                         adListener = object : AdListener() {
                             override fun onAdFailedToLoad(error: LoadAdError) {
                                 Log.e("AdMob", "Banner failed: ${error.message} (Code: ${error.code})")
