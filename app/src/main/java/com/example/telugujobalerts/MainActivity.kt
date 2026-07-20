@@ -128,6 +128,7 @@ fun JobDashboardScreen(activity: ComponentActivity) {
         val queue = Volley.newRequestQueue(activity)
         
         fun parseJsonl(jsonlData: String) {
+            Log.d("TeluguJobAlerts", "Parsing JSONL data: ${jsonlData.take(100)}...")
             listState.clear()
             val lines = jsonlData.split("\n")
             for (line in lines) {
@@ -135,32 +136,33 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                 if (trimmed.isEmpty()) continue
                 try {
                     val json = JSONObject(trimmed)
-                    listState.add(
-                        StructuredJobModel(
-                            title = json.optString("title"),
-                            category = json.optString("category"),
-                            vacancies = json.optString("vacancies"),
-                            lastDate = json.optString("last_date"),
-                            district = json.optString("district"),
-                            ageLimit = json.optString("age_limit"),
-                            qualification = json.optString("qualification"),
-                            patternTable = json.optString("pattern_table"),
-                            instructions = json.optString("instructions"),
-                            links = json.optString("links"),
-                            applicationFee = json.optString("application_fee"),
-                            selectionProcess = json.optString("selection_process"),
-                            postDate = json.optString("post_date"),
-                            jobDescription = json.optString("job_description")
-                        )
+                    val job = StructuredJobModel(
+                        title = json.optString("title"),
+                        category = json.optString("category"),
+                        vacancies = json.optString("vacancies"),
+                        lastDate = json.optString("last_date"),
+                        district = json.optString("district"),
+                        ageLimit = json.optString("age_limit"),
+                        qualification = json.optString("qualification"),
+                        patternTable = json.optString("pattern_table"),
+                        instructions = json.optString("instructions"),
+                        links = json.optString("links"),
+                        applicationFee = json.optString("application_fee"),
+                        selectionProcess = json.optString("selection_process"),
+                        postDate = json.optString("post_date"),
+                        jobDescription = json.optString("job_description")
                     )
+                    listState.add(job)
                 } catch (e: Exception) {
-                    Log.e("TeluguJobAlerts", "Error parsing job line", e)
+                    Log.e("TeluguJobAlerts", "Error parsing job line: $line", e)
                 }
             }
+            Log.d("TeluguJobAlerts", "Successfully loaded ${listState.size} jobs.")
             isFetchingData = false
         }
 
         fun loadLocalData() {
+            Log.d("TeluguJobAlerts", "Loading local data from assets...")
             try {
                 val inputStream = activity.assets.open("jobs.jsonl")
                 val size = inputStream.available()
@@ -169,13 +171,17 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                 inputStream.close()
                 parseJsonl(String(buffer))
             } catch (e: Exception) {
+                Log.e("TeluguJobAlerts", "Local data load failed", e)
                 isFetchingData = false
             }
         }
 
         val request = StringRequest(Request.Method.GET, dataEndpoint,
             { response -> parseJsonl(response) },
-            { loadLocalData() }
+            { error -> 
+                Log.e("TeluguJobAlerts", "Volley request failed: ${error.message}", error)
+                loadLocalData() 
+            }
         )
         queue.add(request)
     }
@@ -205,32 +211,24 @@ fun JobDashboardScreen(activity: ComponentActivity) {
             else -> job.category.contains(selectedCategory, ignoreCase = true)
         }
         
-        // Client-side expiry check for safety
+        // Client-side expiry check - Simplified and made more lenient
         val isNotExpired = try {
             val dateStr = job.lastDate.trim()
             if (dateStr.isNotEmpty() && !dateStr.contains("TBA", true)) {
                 val parts = if (dateStr.contains("-")) dateStr.split("-") else dateStr.split("/")
-                if (parts.size == 3) {
-                    val (y, m, d) = if (parts[0].length == 4) {
-                        // YYYY-MM-DD
-                        Triple(parts[0].toInt(), parts[1].toInt(), parts[2].split(" ")[0].toInt())
-                    } else {
-                        // DD-MM-YYYY
-                        Triple(parts[2].split(" ")[0].toInt(), parts[1].toInt(), parts[0].toInt())
-                    }
+                if (parts.size >= 3) {
+                    val year = if (parts[0].length == 4) parts[0].toInt() else parts[2].split(" ")[0].toInt()
+                    val month = parts[1].toInt()
+                    val day = if (parts[0].length == 4) parts[2].split(" ")[0].toInt() else parts[0].toInt()
+                    
                     val expiry = java.util.Calendar.getInstance().apply { 
-                        set(java.util.Calendar.YEAR, y)
-                        set(java.util.Calendar.MONTH, m - 1)
-                        set(java.util.Calendar.DAY_OF_MONTH, d)
-                        set(java.util.Calendar.HOUR_OF_DAY, 23)
-                        set(java.util.Calendar.MINUTE, 59)
+                        set(year, month - 1, day, 23, 59)
                     }
                     expiry.timeInMillis >= System.currentTimeMillis()
                 } else true
             } else true
         } catch (e: Exception) { 
-            Log.e("TeluguJobAlerts", "Date parse error: ${job.lastDate}", e)
-            true 
+            true // Show job if date is unparseable
         }
 
         matchesSearch && matchesCategory && isNotExpired
@@ -369,7 +367,24 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     )
                 }
                 
-                items(filtered.take(15)) { job ->
+                if (filtered.isEmpty() && !isFetchingData) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.4f))
+                        ) {
+                            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF007BF5), modifier = Modifier.size(48.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("No active jobs found in this category.", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                Text("Tap 'Refresh' or check back later.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                }
+                
+                items(filtered) { job ->
                     GlassyJobCard(job = job, onClick = { selectedJob = job })
                 }
             }
