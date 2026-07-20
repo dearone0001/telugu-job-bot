@@ -8,11 +8,11 @@ from datetime import datetime
 # Targeting multiple high-volume source pages for All India coverage
 SOURCES = [
     {"url": "https://www.freejobalert.com/bank-jobs/", "cat": "Banking"},
-    {"url": "https://www.freejobalert.com/latest-notifications/", "cat": "General"},
+    {"url": "https://www.freejobalert.com/latest-notifications/", "cat": "Central"},
     {"url": "https://www.freejobalert.com/ssc-jobs/", "cat": "SSC"},
     {"url": "https://www.freejobalert.com/railway-jobs/", "cat": "Railways"},
-    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "State Govt"},
-    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "State Govt"}
+    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "State"},
+    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "State"}
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
@@ -135,11 +135,11 @@ def scrape_jobs():
                             if "Bank" in raw_title or "IBPS" in raw_title or "SBI" in raw_title: cat = "Banking"
                             elif "SSC" in raw_title: cat = "SSC"
                             elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
-                            elif "PSC" in raw_title: cat = "State Govt"
+                            elif "PSC" in raw_title or "AP" in raw_title or "Telangana" in raw_title: cat = "State"
 
                             scraped_items.append({
                                 "title": raw_title, "category": cat, "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
-                                "last_date": iso_deadline, "district": "All India" if source['cat'] != "State Govt" else "State Specific",
+                                "last_date": iso_deadline, "district": "All India" if source['cat'] != "State" else "State Specific",
                                 "age_limit": details.get("age_limit", ""), "qualification": details.get("qualification", ""),
                                 "pattern_table": details.get("pattern_table", ""), "instructions": details.get("instructions", ""),
                                 "links": details.get("links", ""), "application_fee": details.get("application_fee", ""),
@@ -148,8 +148,8 @@ def scrape_jobs():
                             })
                             seen_titles.add(raw_title)
                             time.sleep(1)
-                            if len(scraped_items) >= 150: break
-                if len(scraped_items) >= 150: break
+                            if len(scraped_items) >= 200: break
+                if len(scraped_items) >= 200: break
         except Exception as e:
             print(f"Error on {source['url']}: {e}")
 
