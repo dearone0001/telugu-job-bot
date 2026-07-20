@@ -5,19 +5,19 @@ from bs4 import BeautifulSoup
 import time
 from datetime import datetime
 
-# Comprehensive list of FreeJobAlert sources to cover "All Jobs"
+# Comprehensive list of FreeJobAlert sources
 SOURCES = [
     {"url": "https://www.freejobalert.com/latest-notifications/", "cat": "All"},
-    {"url": "https://www.freejobalert.com/central-government-jobs/", "cat": "Central"},
     {"url": "https://www.freejobalert.com/bank-jobs/", "cat": "Banking"},
     {"url": "https://www.freejobalert.com/ssc-jobs/", "cat": "SSC"},
     {"url": "https://www.freejobalert.com/railway-jobs/", "cat": "Railways"},
-    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "State"},
-    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "State"},
+    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "Andhra Pradesh"},
+    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "Telangana"},
     {"url": "https://www.freejobalert.com/teaching-jobs/", "cat": "State"},
     {"url": "https://www.freejobalert.com/police-jobs/", "cat": "State"},
-    {"url": "https://www.freejobalert.com/upsc-jobs/", "cat": "Central"},
-    {"url": "https://www.freejobalert.com/defense-jobs/", "cat": "Central"}
+    {"url": "https://www.freejobalert.com/central-government-jobs/", "cat": "State"}, # Repurposing Central to State as requested
+    {"url": "https://www.freejobalert.com/upsc-jobs/", "cat": "State"},
+    {"url": "https://www.freejobalert.com/defense-jobs/", "cat": "State"}
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
@@ -26,7 +26,6 @@ def parse_date(date_str):
     if not date_str or any(x in date_str.upper() for x in ["TBA", "ADVT", "NA"]):
         return ""
     try:
-        # Try cleaning the string first (sometimes contains time or extra text)
         clean_date = date_str.split(' ')[0].strip()
         for fmt in ('%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y'):
             try:
@@ -48,7 +47,6 @@ def is_expired(date_str):
         return False
 
 def get_job_details(url):
-    """Deep crawl for specific notification info"""
     try:
         response = requests.get(url, headers=HEADERS, timeout=8)
         if response.status_code != 200: return {}
@@ -67,14 +65,12 @@ def get_job_details(url):
             "job_description": "Detailed notification available on the official website."
         }
 
-        # Extract description
         for p in content.find_all('p'):
             text = p.text.strip()
             if len(text) > 80 and "recruitment" in text.lower():
                 details["job_description"] = text
                 break
 
-        # Extract specific sections
         sections = content.find_all(['h2', 'h3', 'p', 'table', 'li', 'span', 'strong'])
         for i, tag in enumerate(sections):
             text = tag.text.strip().lower()
@@ -93,7 +89,6 @@ def get_job_details(url):
                     if cells: rows_list.append("|".join(cells))
                 details["pattern_table"] = "\n".join(rows_list)
 
-        # Build direct links
         links_dict = {}
         for a in content.find_all('a'):
             link_text = a.text.strip().lower()
@@ -125,11 +120,9 @@ def scrape_jobs():
             response = requests.get(source['url'], headers=HEADERS, timeout=15)
             soup = BeautifulSoup(response.text, 'html.parser')
 
-            # Find all relevant tables
             tables = soup.find_all('table', {'class': 'vtable'})
             if not tables: continue
 
-            # Iterate through major notice boards on each page
             for table in tables:
                 for row in table.find_all('tr'):
                     cells = row.find_all('td')
@@ -155,15 +148,23 @@ def scrape_jobs():
                             if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
                             elif "SSC" in raw_title: cat = "SSC"
                             elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
-                            elif "UPSC" in raw_title or "Defense" in raw_title: cat = "Central"
-                            elif "AP" in raw_title or "TS" in raw_title or "Telangana" in raw_title: cat = "State"
+
+                            # Specific mapping for AP and TS
+                            if "AP" in raw_title or "Andhra" in raw_title:
+                                dist = "Andhra Pradesh"
+                                if cat == "State": cat = "Andhra Pradesh"
+                            elif "TS" in raw_title or "Telangana" in raw_title:
+                                dist = "Telangana"
+                                if cat == "State": cat = "Telangana"
+                            else:
+                                dist = "All India"
 
                             scraped_items.append({
                                 "title": raw_title,
                                 "category": cat,
                                 "vacancies": cells[2].text.strip() if len(cells) > 2 else "Check Details",
                                 "last_date": iso_deadline,
-                                "district": "All India" if cat != "State" else "State Specific",
+                                "district": dist,
                                 "age_limit": details.get("age_limit", ""),
                                 "qualification": details.get("qualification", ""),
                                 "pattern_table": details.get("pattern_table", ""),
@@ -175,10 +176,10 @@ def scrape_jobs():
                                 "job_description": details.get("job_description", "")
                             })
                             seen_titles.add(raw_title)
-                            time.sleep(0.5) # Fast but respectful
+                            time.sleep(0.5)
 
-                            if len(scraped_items) >= 300: break # Mega capacity
-                if len(scraped_items) >= 300: break
+                            if len(scraped_items) >= 400: break
+                if len(scraped_items) >= 400: break
         except Exception as e:
             print(f"Error: {e}")
 
@@ -187,7 +188,6 @@ def scrape_jobs():
 if __name__ == "__main__":
     job_list = scrape_jobs()
     if job_list:
-        # Sort by post_date descending
         job_list.sort(key=lambda x: x['post_date'], reverse=True)
         with open('jobs.jsonl', 'w', encoding='utf-8') as f:
             for item in job_list:

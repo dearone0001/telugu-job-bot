@@ -192,8 +192,13 @@ fun JobDashboardScreen(activity: ComponentActivity) {
     val filtered = listState.filter { job ->
         val matchesSearch = job.title.contains(searchText, ignoreCase = true) || 
                           job.category.contains(searchText, ignoreCase = true)
-        val matchesCategory = if (selectedCategory == "All") true 
-                            else job.category.contains(selectedCategory, ignoreCase = true)
+        val matchesCategory = when (selectedCategory) {
+            "All" -> true
+            "State" -> job.category.contains("State", ignoreCase = true) || 
+                       job.category.contains("Andhra", ignoreCase = true) || 
+                       job.category.contains("Telangana", ignoreCase = true)
+            else -> job.category.contains(selectedCategory, ignoreCase = true)
+        }
         
         // Client-side expiry check for safety
         val isNotExpired = try {
@@ -332,7 +337,8 @@ fun JobDashboardScreen(activity: ComponentActivity) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         val categories = listOf(
                             "All" to Icons.Default.AllInclusive,
-                            "Central" to Icons.Default.Public,
+                            "Andhra Pradesh" to Icons.Default.LocationOn,
+                            "Telangana" to Icons.Default.LocationOn,
                             "Banking" to Icons.Default.AccountBalance,
                             "Railways" to Icons.Default.Train,
                             "SSC" to Icons.AutoMirrored.Filled.Assignment,
