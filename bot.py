@@ -3,47 +3,66 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import time
+import re
 from datetime import datetime
 
-# Expanded list of sources focusing on "Full Jobs" for Andhra Pradesh and Telangana
+# Comprehensive list of FreeJobAlert sources
 SOURCES = [
-    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "Andhra Pradesh"},
-    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "Telangana"},
-    {"url": "https://www.freejobalert.com/ap-teaching-jobs/", "cat": "Andhra Pradesh"},
-    {"url": "https://www.freejobalert.com/ts-teaching-jobs/", "cat": "Telangana"},
-    {"url": "https://www.freejobalert.com/ap-police-recruitment/", "cat": "Andhra Pradesh"},
-    {"url": "https://www.freejobalert.com/ts-police-recruitment/", "cat": "Telangana"},
+    {"url": "https://www.freejobalert.com/latest-notifications/", "cat": "All"},
     {"url": "https://www.freejobalert.com/bank-jobs/", "cat": "Banking"},
     {"url": "https://www.freejobalert.com/ssc-jobs/", "cat": "SSC"},
     {"url": "https://www.freejobalert.com/railway-jobs/", "cat": "Railways"},
-    {"url": "https://www.freejobalert.com/latest-notifications/", "cat": "All"},
+    {"url": "https://www.freejobalert.com/andhra-pradesh-govt-jobs/", "cat": "Andhra Pradesh"},
+    {"url": "https://www.freejobalert.com/telangana-govt-jobs/", "cat": "Telangana"},
+    {"url": "https://www.freejobalert.com/teaching-jobs/", "cat": "State"},
+    {"url": "https://www.freejobalert.com/police-jobs/", "cat": "State"},
+    {"url": "https://www.freejobalert.com/central-government-jobs/", "cat": "State"},
+    {"url": "https://www.freejobalert.com/upsc-jobs/", "cat": "State"},
+    {"url": "https://www.freejobalert.com/defense-jobs/", "cat": "State"}
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
 
-def parse_date(date_str):
-    if not date_str or any(x in date_str.upper() for x in ["TBA", "ADVT", "NA"]):
-        return ""
-    try:
-        clean_date = date_str.split(' ')[0].strip()
-        for fmt in ('%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y'):
-            try:
-                return datetime.strptime(clean_date, fmt).strftime('%Y-%m-%d')
-            except ValueError:
-                continue
-        return ""
-    except:
-        return ""
+def extract_latest_date(text):
+    """
+    Scans text for all date patterns (DD-MM-YYYY, YYYY-MM-DD, etc.)
+    and returns the latest one found. Handles cases like '15-03-2025 extended to 31-03-2025'.
+    """
+    if not text or any(x in text.upper() for x in ["TBA", "ADVT", "NA"]):
+        return None
 
-def is_expired(date_str):
-    iso_date = parse_date(date_str)
-    if not iso_date:
-        return False
-    try:
-        expiry_date = datetime.strptime(iso_date, '%Y-%m-%d')
-        return expiry_date.date() < datetime.now().date()
-    except:
-        return False
+    # Pattern for common date formats in job alerts
+    date_patterns = [
+        r'\d{1,2}-\d{1,2}-\d{4}',
+        r'\d{4}-\d{1,2}-\d{1,2}',
+        r'\d{1,2}/\d{1,2}/\d{4}'
+    ]
+
+    found_dates = []
+    for pattern in date_patterns:
+        matches = re.findall(pattern, text)
+        for m in matches:
+            for fmt in ('%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y'):
+                try:
+                    found_dates.append(datetime.strptime(m, fmt))
+                    break
+                except ValueError:
+                    continue
+
+    if not found_dates:
+        return None
+
+    return max(found_dates)
+
+def is_expired(date_text):
+    """Checks if a job's deadline has strictly passed."""
+    latest_expiry = extract_latest_date(date_text)
+    if not latest_expiry:
+        return False # Fail-open: if no date found, don't hide it
+
+    # Set time to end of day for the expiry date
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    return latest_expiry < today
 
 def get_job_details(url):
     try:
@@ -118,6 +137,7 @@ def scrape_jobs():
             print(f"Syncing: {source['url']}...")
             response = requests.get(source['url'], headers=HEADERS, timeout=15)
             soup = BeautifulSoup(response.text, 'html.parser')
+
             tables = soup.find_all('table', {'class': 'vtable'})
             if not tables: continue
 
@@ -128,32 +148,40 @@ def scrape_jobs():
                         title_cell = cells[0]
                         raw_title = title_cell.text.strip()
                         apply_url = title_cell.find('a')['href'] if title_cell.find('a') else None
-                        deadline = cells[2].text.strip()
-                        post_date = cells[1].text.strip() if len(cells) > 1 else ""
+                        deadline_text = cells[2].text.strip()
+                        post_date_text = cells[1].text.strip() if len(cells) > 1 else ""
 
                         if raw_title in seen_titles: continue
-                        if is_expired(deadline): continue
+
+                        # Use new robust expiry check
+                        if is_expired(deadline_text):
+                            print(f"Skipping expired job: {raw_title[:30]} (Deadline: {deadline_text})")
+                            continue
 
                         if apply_url and any(kwd in raw_title for kwd in ["Notification", "Recruitment", "Jobs", "Apply", "Online"]):
-                            print(f"Scraping: {raw_title[:35]}...")
+                            print(f"Deep scraping: {raw_title[:35]}...")
                             details = get_job_details(apply_url)
 
-                            iso_deadline = parse_date(deadline) or deadline
-                            iso_post_date = parse_date(post_date) or datetime.now().strftime('%Y-%m-%d')
+                            # Standardize dates
+                            latest_deadline = extract_latest_date(deadline_text)
+                            latest_post = extract_latest_date(post_date_text)
 
-                            # Intelligent mapping
+                            iso_deadline = latest_deadline.strftime('%Y-%m-%d') if latest_deadline else deadline_text
+                            iso_post_date = latest_post.strftime('%Y-%m-%d') if latest_post else datetime.now().strftime('%Y-%m-%d')
+
+                            # Map categories
                             cat = source['cat']
-                            dist = "All India"
-
-                            if "AP" in raw_title or "Andhra" in raw_title:
-                                dist = "Andhra Pradesh"
-                                cat = "Andhra Pradesh"
-                            elif "TS" in raw_title or "Telangana" in raw_title:
-                                dist = "Telangana"
-                                cat = "Telangana"
-                            elif "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
+                            if "Bank" in raw_title or "IBPS" in raw_title: cat = "Banking"
                             elif "SSC" in raw_title: cat = "SSC"
                             elif "Railway" in raw_title or "RRB" in raw_title: cat = "Railways"
+
+                            dist = "All India"
+                            if "AP" in raw_title or "Andhra" in raw_title:
+                                dist = "Andhra Pradesh"
+                                if cat == "State": cat = "Andhra Pradesh"
+                            elif "TS" in raw_title or "Telangana" in raw_title:
+                                dist = "Telangana"
+                                if cat == "State": cat = "Telangana"
 
                             scraped_items.append({
                                 "title": raw_title,
